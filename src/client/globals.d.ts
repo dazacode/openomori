@@ -1,0 +1,28 @@
+// Globals defined by the game's own scripts (RPG Maker MV core, Pixi 4). Typed loosely on purpose.
+declare const Graphics: any;
+declare const PIXI: any;
+declare const PluginManager: { setup(plugins: unknown): void };
+declare const SceneManager: any;
+declare const Scene_Boot: unknown;
+declare const $plugins: unknown;
+declare const Scene_Map: new (...args: any[]) => any;
+declare const DataManager: any;
+declare const AudioManager: any;
+declare const Input: any;
+declare const $gamePlayer: any;
+declare const $gameMap: any;
+declare const $gameParty: any;
+declare const $gameSwitches: any;
+declare const $gameVariables: any;
+declare const $gameTemp: any;
+declare const $dataMap: any;
+declare const $dataMapInfos: any[];
+declare const $dataSystem: any;
+declare const $dataItems: any[];
+declare const $dataCommonEvents: any[];
+declare const Game_Map: any;
+declare const Scene_Title: any;
+declare const Spriteset_Base: any;
+declare const Spriteset_Map: any;
+declare const Sprite_Picture: any;
+declare const $gameScreen: any;

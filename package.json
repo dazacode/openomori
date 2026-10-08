@@ -1,0 +1,26 @@
+{
+  "name": "omori-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.ts",
+    "start": "bun run build.ts && bun run src/server.ts",
+    "dev": "bun run build.ts --dev && bun --watch run src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun run build.ts && bun run test/smoke.ts && bun run test/debug-panel.ts && bun run test/cutscene.ts"
+  },
+  "dependencies": {
+    "aes-js": "3.1.2",
+    "buffer": "^6.0.3",
+    "js-yaml": "3.14.1",
+    "path-browserify": "^1.0.1"
+  },
+  "devDependencies": {
+    "@types/aes-js": "^3.1.4",
+    "@types/bun": "latest",
+    "@types/js-yaml": "^3.12.10",
+    "@types/path-browserify": "^1.0.3",
+    "puppeteer-core": "^24.0.0",
+    "typescript": "^5.0.0"
+  }
+}
