@@ -120,6 +120,8 @@ Open the game with `?hot=1` to reload whenever you save a file; every mod and ga
 
 **Works and is tested:** the title screen, starting a game, map scenes, dialogue and event scripting, the settings screen, the mod loader (zips, folders, profiles, errors), map and event compilation, checkpoints, routes and the examples. `bun run test` runs the unit tests and then drives a real Chrome through each of those.
 
+**Played by hand:** up to the first stage of the game ([proof](https://x.com/dazacode/status/2108109160906911983?s=46)); nothing later has been played through.
+
 **Known limits**
 - Tested only with the Steam build v1.0.8, on Windows, in Chrome. Other builds, browsers and platforms are untested.
 - Battles, long play sessions and audio have not been tested. Touch and mobile are untested.
@@ -136,6 +138,10 @@ Open the game with `?hot=1` to reload whenever you save a file; every mod and ga
 **Does it change my game folder or my Steam saves?** No. The server serves your install read-only; saves live in the browser's storage under a profile. Your Steam saves are untouched.
 
 **Why does it read my `Launch_OMORI.bat`?** The game decrypts its data with a key its launcher passes on the command line. OpenOMORI reads that key from your own copy at start-up, keeps it in memory and gives it only to the page on `127.0.0.1`. It is never stored in this repository.
+
+**Was AI used to build this?** Yes. This project was built with the help of [Claude Code](https://claude.com/claude-code), Anthropic's AI coding assistant, working with the maintainer: much of the code, tests and documentation was written with its assistance. The maintainer directs the project, reviews changes and decides what ships. Commits made with Claude Code carry a `Co-Authored-By` line. Treat AI-written code like any other code: the automated tests help, but read it before you rely on it, and report anything wrong.
+
+**Has it actually been played?** By hand, only up to the **first stage of the game**; the maintainer's play-test is documented here: [proof on X](https://x.com/dazacode/status/2108109160906911983?s=46). Everything beyond that (later chapters, battles, long sessions, audio and the endings) is covered only by the automated tests and by reading the game's data, not by a full play-through. Story and route tooling in particular is built from the game's data and flag names, not from having played every route. Please report anything that breaks later in the game.
 
 **Why Bun?** One tool for the dev server, bundler, test runner and TypeScript, with fast start-up.
 
