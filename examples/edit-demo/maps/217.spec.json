@@ -1,0 +1,17 @@
+{
+  "id": 217,
+  "base": 217,
+  "events": [
+    {
+      "name": "Visitor",
+      "x": 4,
+      "y": 4,
+      "sprite": "FA_KEL",
+      "do": [
+        {
+          "say": "This room was edited by a mod."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "id": "story-demo",
+  "name": "Story Demo",
+  "version": "0.1.0",
+  "author": "OpenOMORI",
+  "description": "A complete example of the map and event compiler: a new map stamped from the game, your own tileset and sprite, NPC pages, and a door back."
+}

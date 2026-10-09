@@ -1,0 +1,108 @@
+{
+  "id": 1001,
+  "name": "DEMO STREET",
+  "size": [
+    34,
+    12
+  ],
+  "tilesFrom": 13,
+  "stamps": [
+    {
+      "from": 13,
+      "rect": [
+        3,
+        9,
+        34,
+        10
+      ],
+      "at": [
+        0,
+        1
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "Guide",
+      "x": 12,
+      "y": 6,
+      "sprite": "FA_KEL",
+      "pages": [
+        {
+          "do": [
+            {
+              "say": [
+                "Welcome to a map made with no RPG Maker.",
+                "Talk to me again."
+              ]
+            },
+            {
+              "self": "A"
+            }
+          ]
+        },
+        {
+          "if": {
+            "self": "A"
+          },
+          "do": [
+            {
+              "say": "See? Event pages work. Try the door on the right."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Loose sprite",
+      "x": 7,
+      "y": 6,
+      "sprite": "DEMO_NPC",
+      "do": [
+        {
+          "say": "I use a PNG that is not part of the game."
+        }
+      ]
+    },
+    {
+      "name": "Exit",
+      "x": 32,
+      "y": 6,
+      "trigger": "touch",
+      "do": [
+        {
+          "transfer": {
+            "map": 13,
+            "x": 11,
+            "y": 10
+          }
+        }
+      ]
+    }
+  ],
+  "tilesets": [
+    {
+      "name": "DEMO_TILES"
+    }
+  ],
+  "paint": [
+    {
+      "layer": "ABOVE ALL - IV",
+      "tileset": "DEMO_TILES",
+      "tiles": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "at": [
+        14,
+        2
+      ]
+    }
+  ]
+}

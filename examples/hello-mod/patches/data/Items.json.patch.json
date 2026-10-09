@@ -1,0 +1,5 @@
+[
+  { "op": "test", "path": "/2/name", "value": "COLD STEAK" },
+  { "op": "replace", "path": "/2/name", "value": "MODDED STEAK" },
+  { "op": "replace", "path": "/2/description", "value": "Proof that mods work." }
+]

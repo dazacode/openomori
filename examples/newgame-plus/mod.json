@@ -1,0 +1,7 @@
+{
+  "id": "newgame-plus",
+  "name": "New Game+",
+  "version": "0.1.0",
+  "author": "OpenOMORI",
+  "description": "Start the story again and keep levels, skills, equipment, items and gold (each optional). Settings > Mods > Start New Game+, or the plugin command ngplus.start."
+}

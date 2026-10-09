@@ -1,5 +1,33 @@
 {
-  "name": "omori-web",
+  "name": "openomori",
+  "version": "0.1.0",
+  "description": "A modern runtime and modding toolkit for OMORI: runs your own copy in the browser, with a mod loader, a map and event compiler, checkpoints and story-route tools. No game files included.",
+  "license": "MIT",
+  "homepage": "https://github.com/dazacode/openomori#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dazacode/openomori.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dazacode/openomori/issues"
+  },
+  "keywords": [
+    "omori",
+    "omori-mod",
+    "omori-modding",
+    "rpg-maker-mv",
+    "nwjs",
+    "browser-port",
+    "web-port",
+    "game-modding",
+    "mod-loader",
+    "tiled",
+    "bun",
+    "typescript"
+  ],
+  "engines": {
+    "bun": ">=1.3"
+  },
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,12 +35,15 @@
     "start": "bun run build.ts && bun run src/server.ts",
     "dev": "bun run build.ts --dev && bun --watch run src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun run build.ts && bun run test/smoke.ts && bun run test/debug-panel.ts && bun run test/cutscene.ts"
+    "test": "bun run build.ts && bun run mod map build story-demo && bun run mod map build edit-demo && bun test src && bun run test/smoke.ts && bun run test/debug-panel.ts && bun run test/checkpoints.ts && bun run test/story-demo.ts && bun run test/newgame-plus.ts && bun run test/cutscene.ts && bun run test/mods.ts && bun run test/settings.ts",
+    "mod": "bun run src/cli.ts"
   },
   "dependencies": {
     "aes-js": "3.1.2",
     "buffer": "^6.0.3",
+    "fflate": "^0.8.3",
     "js-yaml": "3.14.1",
+    "libarchive.js": "^2.0.2",
     "path-browserify": "^1.0.1"
   },
   "devDependencies": {

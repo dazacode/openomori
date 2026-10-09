@@ -8,7 +8,7 @@ const failures: string[] = [];
 const check = (ok: boolean, msg: string) => { console.log(ok ? 'ok  ' : 'FAIL', msg); if (!ok) failures.push(msg); };
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 try {
-  const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, defaultViewport: { width: 1920, height: 940 },
+  const b = await puppeteer.launch({ executablePath: process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, defaultViewport: { width: 1920, height: 940 },
     args: ['--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11'] });
   const p = await b.newPage();
   const errs: string[] = [];

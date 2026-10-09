@@ -1,0 +1,7 @@
+{
+  "id": "hello-mod",
+  "name": "Hello Mod",
+  "version": "1.0.0",
+  "author": "OpenOMORI",
+  "description": "Reference mod: renames an item, rewrites a line of dialogue, and logs map changes from a script."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "edit-demo",
+  "name": "Edit Demo",
+  "version": "0.1.0",
+  "author": "OpenOMORI",
+  "description": "Edits the game's own map 217 in place: keeps everything, adds one NPC."
+}

@@ -2,9 +2,11 @@
 // so it can teleport, edit switches/variables, give items, heal the party, etc. Nothing here is saved
 // unless you save the game afterwards.
 import { listAsync } from './shim/index.ts';
+import { describeChange } from './checkpoint-core.ts';
+import { captureCheckpoint, deleteCheckpoint, diffCheckpoint, exportCheckpoint, exportCheckpointScript, gameRunning, beatCoverage, describeCheckpoint, routeLines, importCheckpoint, listCheckpoints, restoreCheckpoint, type Checkpoint } from './checkpoints.ts';
 
-type Tab = 'maps' | 'switches' | 'variables' | 'party' | 'items' | 'game';
-const TABS: Tab[] = ['maps', 'switches', 'variables', 'party', 'items', 'game'];
+type Tab = 'maps' | 'switches' | 'variables' | 'party' | 'items' | 'checkpoints' | 'game';
+const TABS: Tab[] = ['maps', 'switches', 'variables', 'party', 'items', 'checkpoints', 'game'];
 const MAX_ROWS = 150; // rows rendered per list; use the filter box to narrow
 
 type Child = Node | string | null | false;
@@ -41,6 +43,9 @@ const CSS = `
 #dbg .bar{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
 #dbg .bar input[type=text]{flex:1}
 #dbg .note{color:#9a9aaa;margin:6px 0}
+#dbg .diff{margin:4px 0 8px;padding:6px;background:#15151c;border:1px solid #2a2a34;border-radius:4px;max-height:240px;overflow:auto;white-space:pre-wrap;font:11px/1.35 ui-monospace,Consolas,monospace}
+#dbg .cp .row{flex-wrap:wrap;row-gap:4px;padding:4px 0}
+#dbg .cp .row .nm{flex:1 1 100%;white-space:normal;overflow:visible;word-break:break-word}
 #dbg .hit{cursor:pointer}#dbg .hit:hover{background:#262633}
 `;
 
@@ -208,6 +213,88 @@ export function installDebug(): void {
         return wrap;
     }
 
+    function download(text: string, name: string, type: string) {
+        const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+        a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+    // Checkpoints: capture the whole game, see what changed since, restore (always with an automatic undo).
+    let cpOpen: string | null = null;
+    function checkpointsTab(): HTMLElement {
+        const wrap = h('div');
+        const list = h('div', {}, h('div', { class: 'note' }, 'loading...'));
+        const fail = (e: unknown) => say(e instanceof Error ? e.message : String(e));
+        const nameIn = h('input', { type: 'text', placeholder: 'name (e.g. "start of chapter 2")' });
+        const file = h('input', { type: 'file', accept: '.json', style: 'display:none', onchange: async (e: Event) => {
+            const f = (e.target as HTMLInputElement).files?.[0];
+            if (!f) return;
+            try { await importCheckpoint(await f.text()); say('imported'); } catch (err) { fail(err); }
+            render();
+        } });
+        let cps: Checkpoint[] = [];
+        let byRoute = false;
+        const names = () => ({ switches: $dataSystem?.switches, variables: $dataSystem?.variables, items: $dataItems, weapons: $dataWeapons, armors: $dataArmors });
+        const paint = () => {
+            list.replaceChildren();
+            const f = filter.trim().toLowerCase();
+            const shown = cps.filter(c => !f || `${c.name} ${describeCheckpoint(c)}`.toLowerCase().includes(f));
+            if (!cps.length) list.append(h('div', { class: 'note' }, 'No checkpoints yet. Capture one, or turn on "Record story beats" in Settings > Gameplay and play.'));
+            else if (!shown.length) list.append(h('div', { class: 'note' }, 'no matches'));
+            if (byRoute) {
+                let n = 0;
+                for (const line of routeLines(shown)) {
+                    list.append(h('div', { class: 'note', style: 'margin-top:8px;font-weight:bold' }, `${line.label} route · ${line.items.length}`));
+                    for (const cp of line.items) { if (n++ < MAX_ROWS) list.append(checkpointRow(cp, names(), fail)); }
+                }
+            } else for (const cp of shown.slice(0, MAX_ROWS)) list.append(checkpointRow(cp, names(), fail));
+            if (shown.length > MAX_ROWS) list.append(h('div', { class: 'note' }, `${shown.length - MAX_ROWS} more, narrow the filter`));
+        };
+        wrap.append(h('div', { class: 'bar' }, nameIn,
+            btn('Capture', async () => {
+                if (!gameRunning()) return say('start a game first');
+                try { await captureCheckpoint(nameIn.value); say('captured'); } catch (e) { fail(e); }
+                render();
+            }), btn('Import', () => file.click()), file));
+        const groupBtn = h('button', { onclick: () => { byRoute = !byRoute; groupBtn.textContent = byRoute ? 'Order: by route' : 'Order: by time'; paint(); } }, 'Order: by time');
+        wrap.append(h('div', { class: 'bar' }, groupBtn));
+        const cov = h('div', { class: 'note' });
+        wrap.append(cov);
+        void beatCoverage().then(c => {
+            if (!c) return;
+            cov.textContent = `Story beats captured: ${c.recorded} of ${c.total}. `;
+            if (c.missing.length) {
+                const link = h('a', { href: '#', style: 'color:#8fa2ff', onclick: (e: Event) => { e.preventDefault(); cov.append(h('pre', { class: 'diff' }, c.missing.join('\n'))); link.remove(); } }, 'show missing');
+                cov.append(link);
+            }
+        });
+        wrap.append(h('div', { class: 'bar' }, h('input', { type: 'text', placeholder: 'filter by name or route (e.g. "Day2", "true")', value: filter, oninput: (e: Event) => { filter = (e.target as HTMLInputElement).value; paint(); } })));
+        wrap.append(list);
+        void listCheckpoints().then(all => { cps = all; paint(); }).catch(fail);
+        return wrap;
+    }
+    function checkpointRow(cp: Checkpoint, names: any, fail: (e: unknown) => void): HTMLElement {
+        const row = h('div', { class: 'cp' },
+            h('div', { class: 'row' }, h('span', { class: 'nm', title: new Date(cp.time).toLocaleString() }, (cp.auto ? '(auto) ' : '') + (cp.forged ? '(forged) ' : '') + (cp.provided ? `(mod ${cp.provided}) ` : '') + cp.name),
+                h('span', { class: 'id', title: describeCheckpoint(cp) }, `map ${cp.digest.map.id}`),
+                btn('changes', () => { cpOpen = cpOpen === cp.id ? null : cp.id; render(); }),
+                btn('restore', async () => {
+                    if (!confirm(`Restore "${cp.name}"? The current state is saved first as an automatic checkpoint.`)) return;
+                    try { await restoreCheckpoint(cp); toggle(false); } catch (e) { fail(e); }
+                }),
+                btn('file', async () => download(await exportCheckpoint(cp), `${cp.name.replace(/[^\w.-]+/g, '_')}.checkpoint.json`, 'application/json')),
+                btn('script', async () => download(await exportCheckpointScript(cp), `${cp.name.replace(/[^\w.-]+/g, '_')}.js`, 'text/javascript')),
+                btn('x', async () => { try { await deleteCheckpoint(cp.id); } catch (e) { fail(e); } render(); })));
+        row.append(h('div', { class: 'note', style: 'margin:0 0 4px 8px' }, `${describeCheckpoint(cp)}${cp.forged ? ' · forged ' + cp.forged : ''}`));
+        if (cpOpen === cp.id) {
+            if (!gameRunning()) row.append(h('div', { class: 'note' }, 'Start a game to compare against it.'));
+            else {
+                const lines = diffCheckpoint(cp).map(c => describeChange(c, names));
+                row.append(h('div', { class: 'note' }, lines.length ? `${lines.length} difference(s) between this checkpoint and now:` : 'Identical to the current state.'),
+                    h('pre', { class: 'diff' }, lines.slice(0, 300).join('\n') + (lines.length > 300 ? `\n... ${lines.length - 300} more` : '')));
+            }
+        }
+        return row;
+    }
+
     function gameTab(): HTMLElement {
         const wrap = h('div');
         const params = new URLSearchParams(location.search);
@@ -237,6 +324,7 @@ export function installDebug(): void {
         nav.replaceChildren(...TABS.map(t => h('button', { class: t === tab ? 'on' : '', onclick: () => { tab = t; filter = ''; render(); } }, t)));
         body.replaceChildren();
         if (tab === 'party') body.append(partyTab());
+        else if (tab === 'checkpoints') body.append(checkpointsTab());
         else if (tab === 'game') body.append(gameTab());
         else {
             const warn = tab === 'maps' ? null : needGame();

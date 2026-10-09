@@ -4,6 +4,7 @@ import path from 'path-browserify';
 import yaml from 'js-yaml';
 import { crypto } from './crypto.ts';
 import { fs, loadOverlay } from './fs.ts';
+import { getActiveProfile } from '../mods/store.ts';
 import { greenworks, nw, processShim, setGameKey } from './nw.ts';
 
 const g = globalThis as Record<string, any>;
@@ -33,7 +34,9 @@ export const shimReady: Promise<void> = (async () => {
     const res = await fetch('/__config');
     if (!res.ok) throw new Error('Could not read the game key from your OMORI install (see README: OMORI_DIR).');
     setGameKey((await res.json()).key);
-    await loadOverlay();
+    // Saves live in the active mod profile's own database (the original profile keeps the pre-mod one).
+    const profile = await getActiveProfile().catch(() => null);
+    await loadOverlay(profile?.fsDb);
     // The game throws on first run if this file is missing.
     if (!fs.existsSync('/appdata/OMORI/CUTSCENE.json')) fs.writeFileSync('/appdata/OMORI/CUTSCENE.json', '{}');
 })();

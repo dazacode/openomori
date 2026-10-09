@@ -15,7 +15,7 @@ const check = (ok: boolean, msg: string) => { console.log(ok ? 'ok  ' : 'FAIL', 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 try {
   await sleep(600);
-  const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, defaultViewport: { width: 1100, height: 760 },
+  const b = await puppeteer.launch({ executablePath: process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, defaultViewport: { width: 1100, height: 760 },
     args: ['--autoplay-policy=document-user-activation-required', '--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11'] });
   const p = await b.newPage();
   const errs: string[] = [];

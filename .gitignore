@@ -1,5 +1,18 @@
+# dependencies and build output
 node_modules/
 dist/
-test/out/
+# local state: your OMORI folder path, logs, test artefacts (screenshots contain game art)
+.omori-dir
 *.log
+latest.log
+test/out/
 .DS_Store
+# decrypted copy of the game made by 'bun run mod dump': never commit game data
+dump/
+# your own dev mods (only the top-level folder; src/mods and src/client/mods are source code)
+/mods/
+# output of 'bun run mod map build' in the examples: it is generated, and may embed tile/event data copied from the game
+examples/*/files/maps/
+examples/*/files/data/
+examples/*/files/languages/
+examples/*/patches/data/MapInfos.json.patch.json

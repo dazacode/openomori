@@ -34,6 +34,20 @@ class ByteCache {
     }
 }
 const cache = new ByteCache();
+
+/** Mods hook in here: they can replace or patch any file the game reads, and add new ones. */
+export interface ModLayer {
+    has(key: string): boolean;
+    resolve(key: string, base: () => Uint8Array | null): Uint8Array | null;
+    added(dir: string): string[];
+}
+let modLayer: ModLayer | null = null;
+const modded = new Map<string, Uint8Array | null>();
+export function setModLayer(layer: ModLayer | null) { modLayer = layer; modded.clear(); }
+const withAdded = (names: string[] | null, dir: string): string[] | null => {
+    const extra = modLayer?.added(dir) ?? [];
+    return names || extra.length ? [...new Set([...(names ?? []), ...extra])] : null;
+};
 const lsCache = new Map<string, string[] | null>();
 const missing = new Set<string>(); // keys known not to exist on the server
 
@@ -61,6 +75,7 @@ function listSync(k: string): string[] | null {
     xhr.open('GET', '/__ls?p=' + encodeURIComponent(k), false);
     let res: string[] | null = null;
     try { xhr.send(); if (xhr.status === 200) res = JSON.parse(xhr.responseText); } catch { /* offline */ }
+    res = withAdded(res, k);
     lsCache.set(k, res);
     return res;
 }
@@ -74,7 +89,7 @@ export async function prefetch(keys: string[]): Promise<void> {
     }));
 }
 export async function listAsync(dir: string): Promise<string[]> {
-    try { const r = await fetch('/__ls?p=' + encodeURIComponent(dir)); return r.ok ? await r.json() : []; } catch { return []; }
+    try { const r = await fetch('/__ls?p=' + encodeURIComponent(dir)); return withAdded(r.ok ? await r.json() : null, keyOf(dir)) ?? []; } catch { return withAdded(null, keyOf(dir)) ?? []; }
 }
 
 // ------------------------------------------------------------------ writable overlay (IndexedDB)
@@ -82,10 +97,11 @@ const overlay = new Map<string, Uint8Array | null>(); // null = deleted
 const overlayDirs = new Set<string>();
 let idb: IDBDatabase | null = null;
 
-export async function loadOverlay(): Promise<void> {
+/** Load this session's saves. Each mod profile has its own database, so profiles never see each other's saves. */
+export async function loadOverlay(dbName = 'omori-fs'): Promise<void> {
     idb = await new Promise<IDBDatabase | null>(res => {
         try {
-            const r = indexedDB.open('omori-fs', 1);
+            const r = indexedDB.open(dbName, 1);
             r.onupgradeneeded = () => r.result.createObjectStore('f');
             r.onsuccess = () => res(r.result);
             r.onerror = () => res(null);
@@ -118,6 +134,11 @@ const bytesOf = (data: string | Uint8Array): Uint8Array =>
 
 function lookup(k: string): Uint8Array | null | undefined {
     if (overlay.has(k)) return overlay.get(k);
+    if (modLayer?.has(k)) {
+        if (!modded.has(k)) modded.set(k, modLayer.resolve(k, () => cache.get(k) ?? fetchSync(k)));
+        const m = modded.get(k);
+        if (m) return m;
+    }
     return cache.get(k);
 }
 
@@ -147,7 +168,7 @@ export const fs = {
     existsSync(p: string): boolean {
         const k = keyOf(p);
         if (overlay.has(k)) return overlay.get(k) !== null;
-        if (overlayDirs.has(k) || cache.has(k)) return true;
+        if (overlayDirs.has(k) || cache.has(k) || modLayer?.has(k)) return true;
         for (const [ok, v] of overlay) if (v && ok.startsWith(k + '/')) return true;
         if (missing.has(k)) return false;
         if (listSync(k)) return true;

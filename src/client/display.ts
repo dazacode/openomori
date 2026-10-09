@@ -19,11 +19,18 @@ export interface DisplayOptions {
     maxResolution: number;
 }
 
+/**
+ * Live display preferences, changed by the settings screen. The URL (`?q=`, `?wide=0`) still wins, so tests and
+ * bookmarks behave exactly as before. `quality` 0 means "automatic" (up to the default max).
+ */
+export const displayPrefs = { quality: 0, wide: true, smooth: true };
+
 export function installDisplay(opts: DisplayOptions = { maxResolution: 3 }): void {
     const G = Graphics;
     const query = new URLSearchParams(location.search);
-    const maxRes = clamp(Number(query.get('q')) || opts.maxResolution, 1, 4);
-    const wideEnabled = query.get('wide') !== '0';
+    const urlQ = Number(query.get('q')) || 0;
+    const maxRes = () => clamp(urlQ || displayPrefs.quality || opts.maxResolution, 1, 4);
+    const wideAllowed = () => query.get('wide') !== '0' && displayPrefs.wide;
 
     let baseW = 640, baseH = 480;
 
@@ -38,7 +45,7 @@ export function installDisplay(opts: DisplayOptions = { maxResolution: 3 }): voi
     const wideWidth = () => clamp(2 * Math.round((baseH * innerWidth / innerHeight) / 2), baseW, MAX_WIDE_WIDTH);
 
     function applyMode(wide: boolean) {
-        const w = wide && wideEnabled ? wideWidth() : baseW;
+        const w = wide && wideAllowed() ? wideWidth() : baseW;
         if (G._width === w) return;
         G._width = w;
         G._height = baseH;
@@ -51,7 +58,7 @@ export function installDisplay(opts: DisplayOptions = { maxResolution: 3 }): voi
         const s = Math.min(innerWidth / this._width, innerHeight / this._height);
         this._realScale = s;
         // Integer internal resolution so the browser only ever downsamples slightly.
-        this._res = clamp(Math.ceil(s * devicePixelRatio - 0.01), 1, maxRes);
+        this._res = clamp(Math.ceil(s * devicePixelRatio - 0.01), 1, maxRes());
     };
 
     G._centerElement = function (el: HTMLCanvasElement | HTMLElement) {
@@ -62,7 +69,7 @@ export function installDisplay(opts: DisplayOptions = { maxResolution: 3 }): voi
         Object.assign(el.style, {
             position: 'absolute', margin: 'auto', inset: '0',
             width: `${w}px`, height: `${h}px`,
-            imageRendering: 'auto', // smooth downsample; the old plugin forced `pixelated`
+            imageRendering: displayPrefs.smooth ? 'auto' : 'pixelated', // smooth downsample by default; the old plugin forced `pixelated`
         });
     };
 

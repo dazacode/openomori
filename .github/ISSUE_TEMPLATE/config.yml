@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/dazacode/openomori/tree/main/docs
+    about: Modding guide, architecture, story model and troubleshooting
