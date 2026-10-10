@@ -1,6 +1,7 @@
 // Embeds the game in a CROSS-ORIGIN <iframe> (host page on :8087, game on :8088) like an embed on another site,
 // then checks it boots, scales to the frame, takes keyboard input, persists data, and opens the debug panel.
 import puppeteer from 'puppeteer-core';
+import { ANGLE, CHROME } from './chrome.ts';
 const FRAME_W = 1000, FRAME_H = 640;
 const game = Bun.spawn(['bun', 'run', 'src/server.ts', '8088'], { stdout: 'ignore', stderr: 'inherit' });
 const host = Bun.serve({
@@ -15,8 +16,8 @@ const check = (ok: boolean, msg: string) => { console.log(ok ? 'ok  ' : 'FAIL', 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 try {
   await sleep(600);
-  const b = await puppeteer.launch({ executablePath: process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, defaultViewport: { width: 1100, height: 760 },
-    args: ['--autoplay-policy=document-user-activation-required', '--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11'] });
+  const b = await puppeteer.launch({ executablePath: CHROME, headless: true, defaultViewport: { width: 1100, height: 760 },
+    args: ['--autoplay-policy=document-user-activation-required', '--ignore-gpu-blocklist', '--enable-gpu', ANGLE] });
   const p = await b.newPage();
   const errs: string[] = [];
   p.on('pageerror', e => errs.push((e as Error).message));

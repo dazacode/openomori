@@ -3,7 +3,7 @@
 import { appendFileSync, readdirSync, statSync, watch, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { discoverMods } from './mods/vfs-node.ts';
-import { treeToZip } from './mods/vfs.ts';
+import { isOsJunk, treeToZip } from './mods/vfs.ts';
 import { ROOT, WWW, ensureGameDir, readGameKey } from './gamedir.ts';
 import { storyIndex } from './mods/mapkit-node.ts';
 
@@ -20,7 +20,8 @@ const log = (line: string) => { console.log(line); try { appendFileSync(LOG_FILE
 let modsVersion = 1;
 let bump: ReturnType<typeof setTimeout> | undefined;
 try {
-    watch(MODS_DIR, { recursive: true }, () => { clearTimeout(bump); bump = setTimeout(() => modsVersion++, 250); });
+    // Finder writes .DS_Store just from browsing a folder: that is not a change to any mod
+    watch(MODS_DIR, { recursive: true }, (_ev, name) => { if (name && isOsJunk(String(name).replace(/\\/g, '/'))) return; clearTimeout(bump); bump = setTimeout(() => modsVersion++, 250); });
 } catch (e) { console.warn(`not watching ${MODS_DIR}: ${(e as Error).message}`); }
 
 const TYPES: Record<string, string> = { yaml: 'text/plain', yml: 'text/plain', md: 'text/plain', ogg: 'audio/ogg', webm: 'video/webm' };
@@ -80,7 +81,8 @@ const server = Bun.serve({
         if (rel === '/__ls') {
             const dir = resolveInWww(url.searchParams.get('p') ?? '');
             if (!dir) return new Response(null, { status: 404 });
-            try { return Response.json(readdirSync(dir)); } catch { return new Response(null, { status: 404 }); }
+            // the game reads every file a folder lists (languages/ above all): never hand it .DS_Store or ._ files
+            try { return Response.json(readdirSync(dir).filter(n => !isOsJunk(n))); } catch { return new Response(null, { status: 404 }); }
         }
         if (rel === '/' || rel === '/index.html') return fileResponse(join(ROOT, 'public', 'index.html'), req);
         if (rel === '/app.js') return fileResponse(join(ROOT, 'dist', 'app.js'), req);

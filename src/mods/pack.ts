@@ -5,6 +5,7 @@
 //   nothing usable no mod.json anywhere, which we say plainly
 import { unzipSync } from 'fflate';
 import { sniff } from './sniff.ts';
+import { isOsJunk, normPath } from './vfs.ts';
 
 export type Entries = Record<string, Uint8Array>;
 
@@ -18,7 +19,7 @@ export interface PackPlan {
     support: Entries | null;
 }
 
-const norm = (p: string) => p.replace(/\\/g, '/').replace(/^\.?\/+/, '');
+const norm = normPath;
 const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '');
 const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const stripArchiveExt = (n: string) => n.replace(/\.(zip|7z|rar|tar|tgz|tar\.gz|tar\.bz2|tbz2|tar\.xz|txz|gz|bz2|xz|mod|omm)$/i, '');
@@ -39,7 +40,7 @@ const HELPER_IDS = new Set(['oneloader']);
 
 export async function planInstall(label: string, raw: Entries, readNested: NestedReader): Promise<PackPlan> {
     const all = new Map<string, Uint8Array>();
-    for (const [k, v] of Object.entries(raw)) { const n = norm(k); if (n && !n.endsWith('/') && !n.startsWith('__MACOSX/')) all.set(n, v); }
+    for (const [k, v] of Object.entries(raw)) { const n = norm(k); if (n && !n.endsWith('/') && !isOsJunk(n)) all.set(n, v); }
     const names = [...all.keys()];
     const plan: PackPlan = { kind: 'none', items: [], skipped: [], support: null };
 

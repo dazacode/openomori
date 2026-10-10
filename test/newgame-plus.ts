@@ -1,6 +1,7 @@
 // New Game+ example mod: carry-over of levels/items/gold into a fresh game, options respected, checkpoint made first.
 import puppeteer from 'puppeteer-core';
 import { mkdirSync } from 'node:fs';
+import { ANGLE, CHROME } from './chrome.ts';
 mkdirSync('test/out', { recursive: true });
 const server = Bun.spawn(['bun', 'run', 'src/server.ts', '8099'], { stdout: 'ignore', stderr: 'inherit', env: { ...process.env, OMORI_MODS: 'examples' } });
 await new Promise(r => setTimeout(r, 500));
@@ -8,8 +9,8 @@ const failures: string[] = [];
 const check = (ok: boolean, msg: string) => { console.log(ok ? 'ok  ' : 'FAIL', msg); if (!ok) failures.push(msg); };
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 try {
-  const b = await puppeteer.launch({ executablePath: process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, defaultViewport: { width: 1920, height: 940 },
-    args: ['--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11'] });
+  const b = await puppeteer.launch({ executablePath: CHROME, headless: true, defaultViewport: { width: 1920, height: 940 },
+    args: ['--ignore-gpu-blocklist', '--enable-gpu', ANGLE] });
   const p = await b.newPage();
   const errs: string[] = [];
   p.on('pageerror', e => errs.push((e as Error).message));

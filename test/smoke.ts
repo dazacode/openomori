@@ -2,9 +2,9 @@
 // camera following while walking, new-game start, no page errors. Screenshots go to test/out/.
 import puppeteer from 'puppeteer-core';
 import { mkdirSync } from 'node:fs';
+import { ANGLE, CHROME } from './chrome.ts';
 
 const PORT = 8099;
-const CHROME = process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const W = 1920, H = 940; // the browser window from the user's screenshot (viewport under the tab bar)
 const out = (n: string) => `test/out/${n}.png`;
 mkdirSync('test/out', { recursive: true });
@@ -18,7 +18,7 @@ try {
     await sleep(500);
     const browser = await puppeteer.launch({
         executablePath: CHROME, headless: true, defaultViewport: { width: W, height: H },
-        args: ['--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11'],
+        args: ['--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--enable-gpu', ANGLE],
     });
     const page = await browser.newPage();
     const pageErrors: string[] = [];

@@ -1,23 +1,43 @@
 // Disk access for mods (Bun/Node only): folders and .zip files in a mods directory.
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { memTree, zipTreeFromBytes, type Tree } from './vfs.ts';
+import { compareNames, isOsJunk, memTree, normPath, zipTreeFromBytes, type Tree } from './vfs.ts';
 
-function walkDir(root: string, rel = ''): string[] {
-    const out: string[] = [];
-    for (const e of readdirSync(join(root, rel), { withFileTypes: true })) {
+/**
+ * Every file under `root`, as [normalised path, path on disk]. Each folder is read in Windows order (macOS lists
+ * folders in no particular order), OS litter is skipped, and symlinked folders are followed (a Dirent of a symlink
+ * is never isDirectory(), which used to ship the link itself as a "file" and break the mod) with a guard against loops.
+ */
+function walkDir(root: string, rel = '', seen = new Set<string>([realpathSync(root)])): [string, string][] {
+    const out: [string, string][] = [];
+    const entries = readdirSync(join(root, rel), { withFileTypes: true }).sort((a, b) => compareNames(a.name.normalize('NFC'), b.name.normalize('NFC')));
+    for (const e of entries) {
         const r = rel ? `${rel}/${e.name}` : e.name;
-        if (e.isDirectory()) out.push(...walkDir(root, r));
-        else out.push(r);
+        if (isOsJunk(normPath(r))) continue;
+        let dir = e.isDirectory();
+        if (e.isSymbolicLink()) {
+            const st = statSync(join(root, r), { throwIfNoEntry: false });
+            if (!st) continue;                             // broken link: nothing to ship
+            dir = st.isDirectory();
+            if (dir) {
+                const real = realpathSync(join(root, r));
+                if (seen.has(real)) continue;              // a link back into the tree
+                seen = new Set(seen).add(real);
+            }
+        }
+        if (dir) out.push(...walkDir(root, r, seen));
+        else out.push([normPath(r), r]);
     }
     return out;
 }
 
 export function dirTree(root: string): Tree {
-    const files = walkDir(root);
+    const pairs = walkDir(root);
+    const onDisk = new Map(pairs);
+    const files = pairs.map(([p]) => p);
     let newest = 0;
-    for (const f of files) newest = Math.max(newest, statSync(join(root, f)).mtimeMs);
-    return { files, read: p => new Uint8Array(readFileSync(join(root, p))), stamp: `dir:${files.length}:${newest}` };
+    for (const [, d] of pairs) newest = Math.max(newest, statSync(join(root, d)).mtimeMs);
+    return { files, read: p => new Uint8Array(readFileSync(join(root, onDisk.get(p) ?? p))), stamp: `dir:${files.length}:${newest}` };
 }
 
 export function zipTreeFromFile(path: string): Tree {

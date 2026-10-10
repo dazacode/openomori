@@ -3,7 +3,7 @@
 //   native    convention over configuration (files/, patches/, scripts/); no "files" key in mod.json
 //   oneloader GOMORI / OneLoader mods: mod.json with a "files" object (with or without "manifestVersion"; a missing
 //             version means 1). The rules below mirror OneLoader's own loader so existing mods behave the same.
-import type { Tree } from './vfs.ts';
+import { normPath, type Tree } from './vfs.ts';
 
 export type Phase = 'early' | 'pre-plugins' | 'post-plugins' | 'ready';
 export type Format = 'json' | 'yaml' | 'text' | 'binary';
@@ -118,7 +118,7 @@ function blank(label: string): ModDef {
 
 /** Find a path in the tree, tolerating differences in case and slashes (mods are written on Windows, zips are case-sensitive). */
 function resolve(tree: Tree, p: string): string | null {
-    const clean = p.replace(/\\/g, '/').replace(/^\.?\/+/, '');
+    const clean = normPath(p);
     if (tree.files.includes(clean)) return clean;
     const low = clean.toLowerCase();
     return tree.files.find(f => f.toLowerCase() === low) ?? null;
@@ -181,8 +181,8 @@ function native(tree: Tree, raw: any, m: ModDef) {
 }
 
 function addScript(tree: Tree, m: ModDef, s: { file?: string; phase?: string }) {
-    const file = s?.file?.replace(/^\.?\//, '');
-    if (typeof file !== 'string' || !tree.files.includes(file)) { m.errors.push(`script not found: ${JSON.stringify(s?.file)}`); return; }
+    const file = typeof s?.file === 'string' ? resolve(tree, s.file) : null;
+    if (!file) { m.errors.push(`script not found: ${JSON.stringify(s?.file)}`); return; }
     const phase = (s.phase ?? 'post-plugins') as Phase;
     if (!PHASES.includes(phase)) { m.errors.push(`script ${file}: unknown phase "${s.phase}" (use ${PHASES.join(' | ')})`); return; }
     m.scripts.push({ file, phase, style: 'classic' });

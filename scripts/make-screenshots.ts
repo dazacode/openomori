@@ -5,6 +5,7 @@ import puppeteer from 'puppeteer-core';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, ensureGameDir } from '../src/gamedir.ts';
+import { ANGLE, CHROME } from '../test/chrome.ts';
 
 if (!ensureGameDir()) process.exit(1);
 const out = join(ROOT, 'docs', 'assets');
@@ -14,8 +15,8 @@ const server = Bun.spawn(['bun', 'run', 'src/server.ts', String(PORT)], { cwd: R
 await new Promise(r => setTimeout(r, 800));
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 try {
-    const b = await puppeteer.launch({ executablePath: process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, defaultViewport: { width: 1280, height: 800, deviceScaleFactor: 2 },
-        args: ['--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11'] });
+    const b = await puppeteer.launch({ executablePath: CHROME, headless: true, defaultViewport: { width: 1280, height: 800, deviceScaleFactor: 2 },
+        args: ['--ignore-gpu-blocklist', '--enable-gpu', ANGLE] });
     const p = await b.newPage();
     const title = () => p.waitForFunction(() => (globalThis as any).SceneManager?._scene?.constructor?.name === 'Scene_OmoriTitleScreen', { timeout: 120000 });
     await p.goto(`http://127.0.0.1:${PORT}/?profile=shots`);

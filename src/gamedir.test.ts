@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { isGameDir, normalizeGameDir } from './gamedir.ts';
 
@@ -20,5 +20,11 @@ describe('game folder detection', () => {
         expect(normalizeGameDir(`'${d}'`)).toBe(resolve(d));
         expect(normalizeGameDir(`  ${d}${process.platform === 'win32' ? '\\' : '/'}  `)).toBe(resolve(d));
         expect(normalizeGameDir(join(d, 'www'))).toBe(resolve(d));
+    });
+
+    test('a folder dragged into a macOS terminal (backslash-escaped spaces) or a ~ path', () => {
+        expect(normalizeGameDir('/Users/me/My\\ Games/OMORI', 'darwin')).toBe(resolve('/Users/me/My Games/OMORI'));
+        expect(normalizeGameDir('~/Games/OMORI', 'darwin')).toBe(resolve(homedir(), 'Games/OMORI'));
+        expect(normalizeGameDir('/Users/me/My\\ Games/OMORI/www/', 'darwin')).toBe(resolve('/Users/me/My Games/OMORI'));
     });
 });

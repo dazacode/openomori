@@ -3,9 +3,9 @@
 // startup-splash skipping, and the game not seeing input while the panel is open.
 import puppeteer, { type Page } from 'puppeteer-core';
 import { mkdirSync } from 'node:fs';
+import { ANGLE, CHROME } from './chrome.ts';
 
 const PORT = 8097;
-const CHROME = process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 mkdirSync('test/out', { recursive: true });
 const server = Bun.spawn(['bun', 'run', 'src/server.ts', String(PORT)], { stdout: 'ignore', stderr: 'inherit' });
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -14,7 +14,7 @@ const check = (ok: boolean, msg: string) => { console.log(ok ? 'ok  ' : 'FAIL', 
 
 const browser = await puppeteer.launch({
     executablePath: CHROME, headless: true, defaultViewport: { width: 1280, height: 720 },
-    args: ['--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11'],
+    args: ['--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--enable-gpu', ANGLE],
 });
 
 async function toTitle(page: Page, query = '') {

@@ -6,6 +6,7 @@
 //   3. a folder named OMORI* next to this project (handy for development)
 // If none of those is a valid install, `ensureGameDir()` asks for the path (server and CLI call it on start-up).
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 export const ROOT = resolve(import.meta.dir, '..');
@@ -14,9 +15,14 @@ const SAVED = join(ROOT, '.omori-dir');
 /** A usable install has www/ with the encrypted game data (www/data and www/js). */
 export const isGameDir = (dir: string) => existsSync(join(dir, 'www', 'data')) && existsSync(join(dir, 'www', 'js'));
 
-/** Accepts the install folder, its www/ folder, a quoted path, or a path with a trailing slash. */
-export function normalizeGameDir(input: string): string {
+/** Accepts the install folder, its www/ folder, a quoted path, or a path with a trailing slash. On macOS and Linux it
+ *  also takes what a terminal gives you when you drag a folder in (`/Users/me/My\\ Games/OMORI`) and `~/...`. */
+export function normalizeGameDir(input: string, platform: string = process.platform): string {
     let p = input.trim().replace(/^["']|["']$/g, '');
+    if (platform !== 'win32') {
+        p = p.replace(/\\(.)/g, '$1');                                   // shell escapes: "\ " -> " "
+        if (p === '~' || p.startsWith('~/')) p = join(homedir(), p.slice(1));
+    }
     p = resolve(p);
     return /[\\/]www$/i.test(p) ? resolve(p, '..') : p;
 }
@@ -25,7 +31,7 @@ function findSilently(): string | null {
     const tries: string[] = [];
     if (process.env.OMORI_DIR) tries.push(normalizeGameDir(process.env.OMORI_DIR));
     try { tries.push(normalizeGameDir(readFileSync(SAVED, 'utf8'))); } catch { /* not saved yet */ }
-    try { for (const f of readdirSync(resolve(ROOT, '..'))) if (/^OMORI/i.test(f)) tries.push(resolve(ROOT, '..', f)); } catch { /* no parent access */ }
+    try { for (const f of readdirSync(resolve(ROOT, '..')).sort()) if (/^OMORI/i.test(f)) tries.push(resolve(ROOT, '..', f)); } catch { /* no parent access */ }
     return tries.find(isGameDir) ?? null;
 }
 

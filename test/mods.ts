@@ -5,9 +5,9 @@ import { zipSync, strToU8 } from 'fflate';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ANGLE, CHROME } from './chrome.ts';
 
 const PORT = 8098;
-const CHROME = process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 mkdirSync('test/out', { recursive: true });
 const work = mkdtempSync(join(tmpdir(), 'omori-mods-'));
 const emptyMods = mkdtempSync(join(tmpdir(), 'omori-devmods-'));
@@ -69,7 +69,7 @@ writeFileSync(fakeSevenZ, 'this is plain text pretending to be a 7z file');
 
 const browser = await puppeteer.launch({
     executablePath: CHROME, headless: true, defaultViewport: { width: 1280, height: 720 },
-    args: ['--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11'],
+    args: ['--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--enable-gpu', ANGLE],
 });
 
 async function load(page: Page, query = '') {

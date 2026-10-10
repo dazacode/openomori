@@ -6,6 +6,7 @@ import puppeteer from 'puppeteer-core';
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, WWW, ensureGameDir } from '../src/gamedir.ts';
+import { CHROME } from '../test/chrome.ts';
 
 if (!ensureGameDir()) process.exit(1);
 const assets = join(ROOT, 'docs', 'assets');
@@ -40,7 +41,7 @@ const page = (w: number, h: number, v: { icon: number; h1: number; tag: number; 
   ${foot ? '<div class="foot">Fan project. Bring your own copy of OMORI &mdash; no game files included.</div>' : ''}
 </div>`;
 
-const browser = await puppeteer.launch({ executablePath: process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: true });
 for (const [name, w, h, v, foot] of [
     ['social-preview', 1280, 640, { icon: 384, h1: 104, tag: 27, chip: 18 }, true],
     ['banner', 1280, 360, { icon: 224, h1: 84, tag: 22, chip: 16 }, false],

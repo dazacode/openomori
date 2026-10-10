@@ -9,6 +9,7 @@ import { WWW } from '../src/gamedir.ts';
 import { planInstall, type Entries } from '../src/mods/pack.ts';
 import { treeFromEntries } from '../src/mods/vfs.ts';
 import { loadMod } from '../src/mods/manifest.ts';
+import { ANGLE, CHROME } from './chrome.ts';
 
 // Optional: point OMO_PACK_DIR at an extracted third-party mod pack (one with www/mods) to run this against real-world mods.
 const PACK = process.env.OMO_PACK_DIR ?? '';
@@ -17,7 +18,6 @@ if (!PACK || !existsSync(join(PACK, 'www', 'mods')) || !existsSync(SEVENZ)) { co
 void WWW;
 
 const PORT = 8095;
-const CHROME = process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 mkdirSync('test/out', { recursive: true });
 const failures: string[] = [];
 const check = (ok: boolean, msg: string) => { console.log(ok ? 'ok  ' : 'FAIL', msg); if (!ok) failures.push(msg); };
@@ -44,7 +44,7 @@ console.log(`packed ${(readFileSync(archive).length / 1048576).toFixed(1)} MB .7
 const server = Bun.spawn(['bun', 'run', 'src/server.ts', String(PORT)], { stdout: 'ignore', stderr: 'inherit', env: { ...process.env, OMORI_MODS: mkdtempSync(join(tmpdir(), 'omori-dev-')) } });
 const browser = await puppeteer.launch({
     executablePath: CHROME, headless: true, defaultViewport: { width: 1280, height: 720 },
-    args: ['--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=d3d11'],
+    args: ['--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--enable-gpu', ANGLE],
 });
 try {
     await sleep(500);
