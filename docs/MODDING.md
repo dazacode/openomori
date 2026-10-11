@@ -71,6 +71,9 @@ Putting a file under `files/` replaces the game file. Adding a name the game doe
   ```
   Start with a `test` op: if a game update changes the data, you get an error instead of silently patching the wrong thing.
 - **JS targets** (`js/plugins/*.js`, `js/rpg_*.js`): `*.patch.json` is a list of `{ "find", "replace", "all"?, "regex"?, "flags"?, "optional"? }`. A `find` that doesn't match is an error.
+- `set` (OpenOmori): `{ "op": "set", "path": "/1300", "value": {...} }` assigns the value at the path without inserting. An array
+  index past the end is filled with null first. Use it to register an entry by id in an array, such as `data/MapInfos.json`:
+  two mods that each set their own slot give the same result in any order, while `add` into an array shifts the items after it.
 - Several mods can patch the same file; patches apply in load order. Two full replacements of the same file conflict: the later wins and a warning is logged, so prefer patches.
 - A patch that fails is **skipped and logged** (mod, file, op number, reason); the rest of the mod still loads.
 

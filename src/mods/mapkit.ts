@@ -340,17 +340,12 @@ export function buildMaps(modId: string, specs: MapSpec[], src0: GameSource): Bu
     }
 
     if (infos.length) {
-        // MapInfos is an array indexed by id: ids inside the array are tested for "empty", ids past the end are appended in order.
-        const ops: unknown[] = [];
-        let len = game.length;
-        for (const i of [...infos].sort((a, b) => a.id - b.id)) {
-            const value = { id: i.id, expanded: false, name: i.name, order: i.id, parentId: 0, scrollX: 0, scrollY: 0, type: 'Name', line: '-' };
-            if (i.id < len) ops.push({ op: 'test', path: `/${i.id}`, value: null }, { op: 'replace', path: `/${i.id}`, value });
-            else {
-                while (len < i.id) { ops.push({ op: 'add', path: `/${len}`, value: null }); len++; }
-                ops.push({ op: 'add', path: `/${i.id}`, value }); len++;
-            }
-        }
+        // MapInfos is an array indexed by id. `set` assigns each new id's slot (padding with null) and never inserts, so
+        // mods that register maps in the same array do not shift each other's entries.
+        const ops = [...infos].sort((a, b) => a.id - b.id).map(i => ({
+            op: 'set', path: `/${i.id}`,
+            value: { id: i.id, expanded: false, name: i.name, order: i.id, parentId: 0, scrollX: 0, scrollY: 0, type: 'Name', line: '-' },
+        }));
         files['patches/data/MapInfos.json.patch.json'] = JSON.stringify(ops, null, 2);
     }
     return { files, infos, errors, warnings };

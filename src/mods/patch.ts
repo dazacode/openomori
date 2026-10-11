@@ -34,6 +34,22 @@ function get(doc: Json, ptr: string): Json {
     return cur;
 }
 
+/** `set` (OpenOmori's op, not in RFC 6902): assign the value at the path without inserting. An array index past the end is
+ *  filled with null first. Two mods can then each set their own slot in one array (such as data/MapInfos.json) in any order,
+ *  and neither shifts the other. `add` into an array still inserts, as RFC 6902 says. */
+function setAt(doc: Json, ptr: string, value: Json): Json {
+    const segs = parsePointer(ptr);
+    if (!segs.length) return value;
+    const { parent, key } = walk(doc, segs, ptr);
+    if (Array.isArray(parent)) {
+        if (!/^(0|[1-9]\d*)$/.test(key)) throw new PatchError(`"${key}" is not an array index in "${ptr}"`);
+        const i = Number(key);
+        while (parent.length < i) parent.push(null);
+        parent[i] = value;
+    } else if (isObj(parent)) parent[key] = value;
+    else throw new PatchError(`cannot set into a non-container at "${ptr}"`);
+    return doc;
+}
 function arrIndex(parent: any[], key: string, ptr: string, allowEnd: boolean): number {
     if (key === '-' && allowEnd) return parent.length;
     if (!/^(0|[1-9]\d*)$/.test(key)) throw new PatchError(`"${key}" is not an array index in "${ptr}"`);
@@ -77,10 +93,11 @@ export function applyJsonPatch(doc: Json, ops: JsonPatchOp[]): Json {
                 case 'add': out = add(out, o.path, clone(o.value)); break;
                 case 'remove': out = remove(out, o.path); break;
                 case 'replace': get(out, o.path); out = o.path === '' ? clone(o.value) : (remove(out, o.path), add(out, o.path, clone(o.value))); break;
+                case 'set': out = setAt(out, o.path, clone(o.value)); break;
                 case 'move': { const v = get(out, o.from ?? ''); out = remove(out, o.from!); out = add(out, o.path, v); break; }
                 case 'copy': out = add(out, o.path, clone(get(out, o.from ?? ''))); break;
                 case 'test': if (!deepEqual(get(out, o.path), o.value)) throw new PatchError(`test failed: value at path differs from expected`); break;
-                default: throw new PatchError(`unknown op "${o.op}" (use add/remove/replace/move/copy/test)`);
+                default: throw new PatchError(`unknown op "${o.op}" (use add/remove/replace/move/copy/test, or set)`);
             }
         } catch (e) {
             throw new PatchError(`${where}: ${(e as Error).message}`);

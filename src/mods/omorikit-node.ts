@@ -226,7 +226,7 @@ export function artKeyCommand(): void {
     console.log(Buffer.from(e.assetKey).toString('hex'));
 }
 
-/** Map ids and registry extensions per mod folder, for checks across mods (lint runs them when given two or more mods). */
+/** Map ids a mod claims, and how it touches data/MapInfos.json, for checks across mods. */
 export function modMapClaims(dir: string): { label: string; ids: Set<number>; registryAdds: number[] } {
     const ids = new Set<number>();
     const specDir = join(dir, 'maps');
@@ -239,16 +239,20 @@ export function modMapClaims(dir: string): { label: string; ids: Set<number>; re
         const m = f.match(/^Map(\d+)\.json$/);
         if (m) ids.add(Number(m[1]));
     }
+    // registryAdds: the old insertion style (add), which shifts other mods' entries. Set ops claim their slot and are fine.
     const registryAdds: number[] = [];
     const patch = join(dir, 'patches', 'data', 'MapInfos.json.patch.json');
     if (existsSync(patch)) for (const op of JSON.parse(readFileSync(patch, 'utf8'))) {
         const m = /^\/(\d+)$/.exec(op.path ?? '');
-        if (op.op === 'add' && m) registryAdds.push(Number(m[1]));
+        if (!m) continue;
+        if (op.op === 'set') ids.add(Number(m[1]));
+        else if (op.op === 'add') registryAdds.push(Number(m[1]));
     }
     return { label: dir.split('/').pop()!, ids, registryAdds };
 }
 
-/** Findings that need more than one mod: the same map id in two mods, or two mods extending the MapInfos registry above 999. */
+/** Findings that need more than one mod: one map id claimed by two mods (error); the old add-style registry entries, which
+ *  shift other mods' entries (error when two mods do it, warning for one mod on its own). Set ops never conflict. */
 export function crossModFindings(claims: ReturnType<typeof modMapClaims>[]): Finding[] {
     const out: Finding[] = [];
     const owner = new Map<number, string>();
@@ -257,7 +261,10 @@ export function crossModFindings(claims: ReturnType<typeof modMapClaims>[]): Fin
         if (other && other !== c.label) out.push({ level: 'error', file: c.label, message: `map ${id} is also used by ${other}: two mods cannot share a map id` });
         else owner.set(id, c.label);
     }
-    const extenders = claims.filter(c => c.registryAdds.some(n => n >= 1000));
-    if (extenders.length > 1) out.push({ level: 'error', file: extenders.map(c => c.label).join(', '), message: 'more than one mod extends data/MapInfos.json above id 999 with JSON Patch "add": each add inserts and shifts the others, so the registry ends up misplaced. Keep one mod responsible for the registry, or change the engine to set entries by id (see openomori.md, MapInfos).' });
+    const inserters = claims.filter(c => c.registryAdds.some(n => n >= 1000));
+    for (const c of inserters) out.push({
+        level: inserters.length > 1 ? 'error' : 'warn', file: c.label,
+        message: 'registers maps with JSON Patch "add", which inserts and shifts other entries in data/MapInfos.json. Use "set" (set the slot by id) instead.',
+    });
     return out;
 }
