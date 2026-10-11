@@ -16,3 +16,5 @@ examples/*/files/maps/
 examples/*/files/data/
 examples/*/files/languages/
 examples/*/patches/data/MapInfos.json.patch.json
+# game images decoded for reading (art decode): game art, never commit
+art-out/

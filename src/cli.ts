@@ -5,6 +5,11 @@
 //   pack <modDir> [out]   zip a mod folder for distribution
 //   find <text>           search the dumped game for text (names, dialogue, switches) and print file + line
 //   map new|build|show  author new maps + events from a small spec (see docs/MODDING.md)
+//   say <file.key | text>  print a line of the game's dialogue (or search the dialogue)
+//   macros                list the message macros (\kel, \bas ...) the game defines
+//   commands [n]         what the game uses: plugin commands, script calls, event codes
+//   lint [mod...]        check mod dialogue, text codes, sprite names and ShowMessage references
+//   art sizes [folder]    measure the game's images (characters, faces, pictures ...); art decode <folder/name>  write one as a PNG to ./art-out
 //   routes [out.md|--json]  report on the story's flags: spine, phases, endings, route counters, priority-ladder events
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -15,6 +20,7 @@ import { discoverMods, dirTree } from './mods/vfs-node.ts';
 import { treeToZip } from './mods/vfs.ts';
 import { mapCommand, loadSpecs, gameSource, routesCommand } from './mods/mapkit-node.ts';
 import { buildMaps } from './mods/mapkit.ts';
+import { artDecodeCommand, artKeyCommand, artSizesCommand, commandsCommand, lintCommand, macrosCommand, sayCommand } from './mods/omorikit-node.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 if (['dump', 'check', 'routes'].includes(cmd ?? '') || (cmd === 'map' && ['build', 'show'].includes(args[0] ?? ''))) { if (!ensureGameDir()) process.exit(1); }
@@ -138,6 +144,11 @@ switch (cmd) {
     case 'find': find(args.join(' ')); break;
     case 'map': mapCommand(args); break;
     case 'routes': routesCommand(args); break;
+    case 'say': sayCommand(args); break;
+    case 'macros': macrosCommand(); break;
+    case 'commands': commandsCommand(args); break;
+    case 'lint': lintCommand(args); break;
+    case 'art': if (args[0] === 'decode') artDecodeCommand(args.slice(1)); else if (args[0] === 'key') artKeyCommand(); else artSizesCommand(args[0] === 'sizes' ? args.slice(1) : args); break;
     default:
-        console.log(`OMORI mod tools (game: ${GAME_DIR})\n  dump [dir]           decrypt the game to readable files (default ./dump)\n  find <text>          search the dump\n  new <id>             scaffold a mod in ./mods/<id>\n  check [path...]      validate mods and dry-run their edits\n  pack <dir> [out]     zip a mod for sharing`);
+        console.log(`OMORI mod tools (game: ${GAME_DIR})\n  dump [dir]           decrypt the game to readable files (default ./dump)\n  find <text>          search the dump\n  new <id>             scaffold a mod in ./mods/<id>\n  check [path...]      validate mods and dry-run their edits\n  pack <dir> [out]     zip a mod for sharing\n  say <file.key|text>  read a line of the game dialogue\n  macros               list message macros\n  commands [n]         plugin commands and script calls the game uses\n  lint [mod...]        check mod dialogue, text codes, sprites, ShowMessage refs`);
 }

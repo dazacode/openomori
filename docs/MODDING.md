@@ -26,6 +26,10 @@ bun run mod find "STEAK"  # grep the dump: shows file:line
 bun run mod new my-mod    # scaffold ./mods/my-mod
 bun run mod check my-mod  # validate + dry-run every edit against the real game files
 bun run mod pack mods/my-mod   # -> my-mod.zip to share
+bun run mod lint my-mod    # dialogue: YAML, text codes, faces; sprite names; ShowMessage references
+bun run mod say 01_map_whitespace.message_4   # read one line of the game's dialogue (or: mod say <text> to search)
+bun run mod macros         # the speaker shortcuts (\kel, \bas ...) the game defines
+bun run mod commands 25    # plugin commands and script calls the game uses, with counts
 ```
 
 Mods in `./mods` (folders or `.zip`) are the **dev folder**: they show up in the library on every load. Tick *Load every mod from the dev folder automatically* in a profile, and open the game with `?hot=1` to reload whenever you save a file.
