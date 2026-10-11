@@ -116,3 +116,19 @@ describe('style tells (anti-slop)', () => {
         expect(lintDialogue(doc!, 'x.yml', { macros: new Map(), faceExists: () => true }).some(f => f.level === 'warn' && f.message.includes('delve'))).toBe(true);
     });
 });
+
+describe('cross-mod checks (map ids and MapInfos)', () => {
+    const { crossModFindings } = require('./omorikit-node.ts');
+    test('the same map id in two mods is an error', () => {
+        const f = crossModFindings([{ label: 'a', ids: new Set([1300]), registryAdds: [] }, { label: 'b', ids: new Set([1300]), registryAdds: [] }]);
+        expect(f.some((x: any) => x.level === 'error' && x.message.includes('1300'))).toBe(true);
+    });
+    test('two mods extending MapInfos above 999 is an error; one mod is fine', () => {
+        const two = crossModFindings([{ label: 'a', ids: new Set(), registryAdds: [1000, 1001] }, { label: 'b', ids: new Set(), registryAdds: [1000] }]);
+        expect(two.some((x: any) => x.level === 'error' && x.message.includes('MapInfos'))).toBe(true);
+        expect(crossModFindings([{ label: 'a', ids: new Set(), registryAdds: [1000] }])).toEqual([]);
+    });
+    test('distinct ids and no registry changes pass', () => {
+        expect(crossModFindings([{ label: 'a', ids: new Set([1300]), registryAdds: [] }, { label: 'b', ids: new Set([1301]), registryAdds: [] }])).toEqual([]);
+    });
+});

@@ -118,6 +118,11 @@ export function lintCommand(args: string[]): void {
     const omoriBase = join(DUMP, 'js', 'plugins', 'Omori BASE.js');
     const extraCodes = existsSync(omoriBase) ? pluginCodes(dec.decode(readFileSync(omoriBase))) : new Set(['fn']);
     let errors = 0;
+    if (dirs.length > 1) {
+        const cross = crossModFindings(dirs.map(modMapClaims));
+        if (cross.length) console.log('across mods:');
+        for (const f of cross) { if (f.level === 'error') errors++; console.log(`  ${f.level === 'error' ? '✗' : '!'} ${f.file}: ${f.message}`); }
+    }
     for (const dir of dirs) {
         const findings: Finding[] = [];
         const modDialogue = new Map<string, Record<string, any>>();
@@ -135,7 +140,7 @@ export function lintCommand(args: string[]): void {
             findings.push(...lintSpriteName(f, size ?? undefined).map(x => ({ ...x, file: `files/img/characters/${x.file}` })));
         }
         const known = (file: string, key: string) => !!(dump.get(file)?.[key] ?? modDialogue.get(file)?.[key]);
-        for (const sub of ['files', 'patches', 'scripts']) {
+        for (const sub of ['files', 'patches', 'scripts', 'maps']) {   // maps/ holds the map specs, whose plugin commands name dialogue
             const root = join(dir, sub);
             if (!existsSync(root)) continue;
             const walk = (d: string): string[] => readdirSync(d).flatMap(x => {
@@ -219,4 +224,40 @@ export function artKeyCommand(): void {
     const e = artEngine();
     if (!e || !e.assetKey) { console.error('no game key: point OMORI_DIR at your OMORI install (the folder with www/ and Launch_OMORI.bat)'); process.exit(1); }
     console.log(Buffer.from(e.assetKey).toString('hex'));
+}
+
+/** Map ids and registry extensions per mod folder, for checks across mods (lint runs them when given two or more mods). */
+export function modMapClaims(dir: string): { label: string; ids: Set<number>; registryAdds: number[] } {
+    const ids = new Set<number>();
+    const specDir = join(dir, 'maps');
+    if (existsSync(specDir)) for (const f of readdirSync(specDir).filter(x => x.endsWith('.spec.json'))) {
+        const id = Number(JSON.parse(readFileSync(join(specDir, f), 'utf8')).id);
+        if (Number.isInteger(id)) ids.add(id);
+    }
+    const dataDir = join(dir, 'files', 'data');
+    if (existsSync(dataDir)) for (const f of readdirSync(dataDir)) {
+        const m = f.match(/^Map(\d+)\.json$/);
+        if (m) ids.add(Number(m[1]));
+    }
+    const registryAdds: number[] = [];
+    const patch = join(dir, 'patches', 'data', 'MapInfos.json.patch.json');
+    if (existsSync(patch)) for (const op of JSON.parse(readFileSync(patch, 'utf8'))) {
+        const m = /^\/(\d+)$/.exec(op.path ?? '');
+        if (op.op === 'add' && m) registryAdds.push(Number(m[1]));
+    }
+    return { label: dir.split('/').pop()!, ids, registryAdds };
+}
+
+/** Findings that need more than one mod: the same map id in two mods, or two mods extending the MapInfos registry above 999. */
+export function crossModFindings(claims: ReturnType<typeof modMapClaims>[]): Finding[] {
+    const out: Finding[] = [];
+    const owner = new Map<number, string>();
+    for (const c of claims) for (const id of c.ids) {
+        const other = owner.get(id);
+        if (other && other !== c.label) out.push({ level: 'error', file: c.label, message: `map ${id} is also used by ${other}: two mods cannot share a map id` });
+        else owner.set(id, c.label);
+    }
+    const extenders = claims.filter(c => c.registryAdds.some(n => n >= 1000));
+    if (extenders.length > 1) out.push({ level: 'error', file: extenders.map(c => c.label).join(', '), message: 'more than one mod extends data/MapInfos.json above id 999 with JSON Patch "add": each add inserts and shifts the others, so the registry ends up misplaced. Keep one mod responsible for the registry, or change the engine to set entries by id (see openomori.md, MapInfos).' });
+    return out;
 }
