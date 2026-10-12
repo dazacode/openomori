@@ -41,6 +41,8 @@ const CSS = `
 #oset .seg button{background:#16161d;border:0;border-right:1px solid #44445a;padding:6px 12px;color:#c9c9d6}
 #oset .seg button:last-child{border-right:0}
 #oset .seg button[aria-checked=true]{background:#c2303c;color:#fff}
+#oset .sel{background:#16161d;border:1px solid #44445a;color:#e6e6ef;padding:6px 10px;max-width:340px;font:inherit}
+#oset .sel:focus{outline:1px solid #c2303c}
 #oset input[type=range]{width:200px;accent-color:#ff4757}
 #oset .val{min-width:3.4em;text-align:right;font-variant-numeric:tabular-nums;color:#ddd}
 #oset .reset{background:none;border:0;color:#8d8da3;padding:2px 6px;font-size:16px;visibility:hidden}
@@ -182,6 +184,19 @@ function row(s: Setting): HTMLElement {
         input.addEventListener('change', () => { dragging = false; c.preview?.(); });
         ctl.append(input, val);
         update.push(() => { input.value = String(c.get()); val.textContent = `${c.get()}${c.unit ?? ''}`; });
+    } else if (c.type === 'choice' && (c.options.length > 6 || c.options.some(o => o.group))) {
+        // a long list (a mod's chapter select): a dropdown, its options under their group headings, instead of a row of
+        // buttons that runs off the panel
+        const sel = h('select', { class: 'sel', tabindex: -1, 'aria-label': s.label }) as HTMLSelectElement;
+        let og: HTMLElement | null = null, last: string | undefined;
+        for (const o of c.options) {
+            const opt = h('option', { value: String(o.value) }, o.label);
+            if (o.group !== last) { last = o.group; og = o.group ? h('optgroup', { label: o.group }) : null; if (og) sel.append(og); }
+            (og ?? sel).append(opt);
+        }
+        sel.addEventListener('change', () => { const o = c.options.find(x => String(x.value) === sel.value); if (o) c.set(o.value); });
+        ctl.append(sel);
+        update.push(() => { sel.value = String(c.get()); });
     } else if (c.type === 'choice') {
         const seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': s.label },
             ...c.options.map(o => h('button', { role: 'radio', tabindex: -1, 'data-v': String(o.value), onclick: () => c.set(o.value) }, o.label)));

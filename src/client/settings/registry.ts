@@ -18,7 +18,8 @@ export const TABS: { id: TabId; label: string }[] = [
     { id: 'system', label: 'System' },
 ];
 
-export type Choice = { value: string | number; label: string };
+/** `group`: a heading the option sits under when the choice shows as a dropdown (long lists, see panel.ts). */
+export type Choice = { value: string | number; label: string; group?: string };
 
 export type Control =
     | { type: 'toggle'; get(): boolean; set(v: boolean): void }
