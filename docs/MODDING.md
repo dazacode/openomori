@@ -114,12 +114,16 @@ Debugging tips: F9 is the built-in debug panel (teleport, switches, variables, i
 
 ## Making new maps and events (no RPG Maker, no Tiled)
 
+Prefer clicking to typing? Run `bun run start` and open **http://127.0.0.1:8080/editor/**: a visual editor for the files described below (see `editor/README.md`).
+
 A map is three things the game reads: Tiled-format tile layers (`maps/map<ID>.json`), RPG Maker map data with events
 (`data/Map<ID>.json`), and an entry in `data/MapInfos.json`. You describe the map in one small file and the compiler writes all of them.
 
 ```
 bun run mod new my-story
 bun run mod map show --game 13                      # ASCII picture of a real map: # blocked, . drawn, letters = events with a legend
+bun run mod map shot --game 13 --zoom 0.5 --out m.png  # a real picture (needs Chrome), tile numbers on the edges
+bun run mod map list park                           # find game maps by name
 bun run mod map new my-story 1001 "My Street" 34x12 # starter mods/my-story/maps/1001.spec.json
 bun run mod map build my-story                      # compile every maps/*.spec.json into files/, languages and patches
 bun run mod map show my-story 1001                  # look at the result

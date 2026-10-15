@@ -15,6 +15,8 @@ export interface GameSource {
     systemCounts(): { switches: number; variables: number } | null;
     assetExists(rel: string): boolean;             // e.g. "img/characters/FA_KEL.png"
     pngSize?(rel: string): [number, number] | null; // size of a PNG shipped by the mod being built
+    snapshotTiled?(id: number): any;               // the mod's own earlier output for a map it took over (maps/.base/<id>.tiled.json)
+    snapshotData?(id: number): any;                // ... and its RPG Maker data (maps/.base/<id>.data.json)
 }
 
 export type Cond = { switch?: number | number[]; notSwitch?: number | number[]; variable?: [number, '==' | '>=' | '<=' | '>' | '<' | '!=', number]; self?: string; notSelf?: string; item?: number };
@@ -47,11 +49,13 @@ export interface PageSpec {
 }
 export interface EventSpec extends PageSpec { name: string; x: number; y: number; note?: string; pages?: PageSpec[] }
 export interface Stamp { from: number; rect: [number, number, number, number]; at: [number, number] }
-export interface PaintSpec { layer: string; tileset: string; tile?: number; rect?: [number, number, number, number]; at?: [number, number]; tiles?: (number | null)[][] }
+export interface PaintSpec { layer: string; tileset?: string; erase?: boolean; tile?: number; rect?: [number, number, number, number]; at?: [number, number]; tiles?: (number | null)[][] }
 export interface MapSpec {
     id: number; name?: string; size?: [number, number];
     base?: number;                 // start from this existing map (same id = edit that map in place, keeping its events)
     removeEvents?: number[];       // with base: event ids to delete
+    moveEvents?: Record<string, [number, number]>; // with base: event id -> new [x, y] (keeps the event's pages)
+    snapshot?: boolean;            // the base is this mod's own earlier output (maps/.base/), not a game map: a map another tool builds, taken over
     tilesets?: { name: string }[]; // PNGs at files/img/tilesets/<name>.png become usable tilesets
     paint?: PaintSpec[];           // place tiles from a tileset (the game's or yours) on a named layer
     tilesFrom?: number;            // map whose tilesets/layers to use (default 13)
@@ -232,8 +236,8 @@ const yamlStr = (s: string) => JSON.stringify(s);
 // ------------------------------------------------------------------ build
 export function validateSpec(spec: MapSpec, fail: (m: string) => void) {
     if (!Number.isInteger(spec.id) || spec.id < 1) fail('id must be a positive integer');
-    if (spec.base === undefined && !spec.name) fail('name is required');
-    if (spec.base === undefined && !spec.size) fail('size is required (or set "base" to start from an existing map)');
+    if (spec.base === undefined && !spec.snapshot && !spec.name) fail('name is required');
+    if (spec.base === undefined && !spec.snapshot && !spec.size) fail('size is required (or set "base" to start from an existing map)');
     if (spec.size && (!Array.isArray(spec.size) || spec.size.length !== 2 || spec.size.some(n => !Number.isInteger(n) || n < 5 || n > 300))) fail('size must be [width, height], each 5..300');
 }
 
@@ -247,6 +251,13 @@ function paint(dst: any, p: PaintSpec, src: GameSource, fail: (m: string) => voi
     const layer = (dst.layers as any[]).find(l => l.type === 'tilelayer' && l.name === p.layer);
     if (!layer) { fail(`paint: no layer "${p.layer}" (layers: ${(dst.layers as any[]).filter(l => l.type === 'tilelayer').map(l => l.name).join(', ')})`); return; }
     if (isCollisionLayer(layer)) { fail('paint: use "blocked" for collision, not paint'); return; }
+    if (p.erase) { // clear tiles: needs only a layer and a rect/at
+        const [rx, ry, rw, rh] = p.rect ?? [...(p.at ?? [0, 0]), 1, 1];
+        if (rx < 0 || ry < 0 || rx + rw > dst.width || ry + rh > dst.height) { fail(`paint: erase rect ${[rx, ry, rw, rh]} is outside the ${dst.width}x${dst.height} map`); return; }
+        for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) layer.data[y * dst.width + x] = 0;
+        return;
+    }
+    if (!p.tileset) { fail('paint: "tileset" is required (or "erase": true with a rect)'); return; }
     const source = p.tileset.endsWith('.json') ? p.tileset : `${p.tileset}.json`;
     const def = src.tileset(source);
     if (!def) { fail(`paint: tileset "${p.tileset}" is not a game tileset or one of this map's "tilesets"`); return; }
@@ -287,10 +298,12 @@ export function buildMaps(modId: string, specs: MapSpec[], src0: GameSource): Bu
         if (seen.has(spec.id)) { err('duplicate id in this mod'); continue; }
         seen.add(spec.id);
         const existing = game[spec.id];
-        const editing = spec.base !== undefined && spec.base === spec.id;
+        const snap = !!spec.snapshot;                 // editing the mod's own map: nothing in the game to check or register
+        const hasBase = spec.base !== undefined || snap;
+        const editing = snap || (spec.base !== undefined && spec.base === spec.id);
         if (existing && !editing) { err(`id ${spec.id} is already used by the game ("${existing.name}"); pick a free id (${Math.max(1000, game.length)}+ is safe), or set "base": ${spec.id} to edit that map`); continue; }
-        if (editing && !existing) { err(`"base": ${spec.id} but the game has no map ${spec.id}`); continue; }
-        if (editing) warn(`replaces the game's map ${spec.id} ("${existing.name}") as a whole file; another mod that also replaces it will conflict`);
+        if (editing && !existing && !snap) { err(`"base": ${spec.id} but the game has no map ${spec.id}`); continue; }
+        if (editing && !snap) warn(`replaces the game's map ${spec.id} ("${existing.name}") as a whole file; another mod that also replaces it will conflict`);
 
         // custom tilesets declared by this spec
         let bad = false;
@@ -304,11 +317,16 @@ export function buildMaps(modId: string, specs: MapSpec[], src0: GameSource): Bu
         }
         if (bad) continue;
 
-        const from = spec.base ?? spec.tilesFrom ?? 13;
+        const from = snap ? spec.id : spec.base ?? spec.tilesFrom ?? 13;
         let base: any, baseData: any;
-        try { base = src.tiledMap(from); baseData = src.mapData(from); } catch (e) { err(`${spec.base !== undefined ? 'base' : 'tilesFrom'} ${from}: ${(e as Error).message}`); continue; }
-        const tiled = spec.base !== undefined ? clone(base) : newTiledMap(base, spec.size![0], spec.size![1]);
-        if (spec.base !== undefined && spec.size && (spec.size[0] !== tiled.width || spec.size[1] !== tiled.height)) warn(`size ${spec.size} ignored: a "base" map keeps its own size (${tiled.width}x${tiled.height})`);
+        try {
+            if (snap) {
+                if (!src0.snapshotTiled || !src0.snapshotData) throw new Error('this build cannot read snapshots');
+                base = src0.snapshotTiled(spec.id); baseData = src0.snapshotData(spec.id);
+            } else { base = src.tiledMap(from); baseData = src.mapData(from); }
+        } catch (e) { err(`${snap ? 'snapshot' : spec.base !== undefined ? 'base' : 'tilesFrom'} ${from}: ${(e as Error).message}`); continue; }
+        const tiled = hasBase ? clone(base) : newTiledMap(base, spec.size![0], spec.size![1]);
+        if (hasBase && spec.size && (spec.size[0] !== tiled.width || spec.size[1] !== tiled.height)) warn(`size ${spec.size} ignored: a "base" map keeps its own size (${tiled.width}x${tiled.height})`);
         const w = tiled.width as number, h = tiled.height as number;
         for (const s of spec.stamps ?? []) stamp(tiled, s, src, err);
         for (const p of spec.paint ?? []) paint(tiled, p, src, err);
@@ -316,8 +334,14 @@ export function buildMaps(modId: string, specs: MapSpec[], src0: GameSource): Bu
 
         const file = `${modId}_map${spec.id}`;
         const ctx = new Ctx(file, warn, err, src, mapIds);
-        const events: any[] = spec.base !== undefined ? clone(baseData.events) : [null];
+        const events: any[] = hasBase ? clone(baseData.events) : [null];
         for (const rid of spec.removeEvents ?? []) { if (events[rid]) events[rid] = null; else warn(`removeEvents: the map has no event ${rid}`); }
+        for (const [rid, to] of Object.entries(spec.moveEvents ?? {})) {
+            const e = events[Number(rid)];
+            if (!e) { warn(`moveEvents: the map has no event ${rid}`); continue; }
+            if (!Array.isArray(to) || to[0] < 0 || to[1] < 0 || to[0] >= w || to[1] >= h) { err(`moveEvents: event ${rid} cannot move to ${JSON.stringify(to)} on a ${w}x${h} map`); continue; }
+            e.x = to[0]; e.y = to[1];
+        }
         (spec.events ?? []).forEach(ev => {
             if (ev.x < 0 || ev.y < 0 || ev.x >= w || ev.y >= h) err(`event "${ev.name}" at (${ev.x},${ev.y}) is outside the ${w}x${h} map`);
             const pages = (ev.pages?.length ? ev.pages : [ev]).map(p => pageOf(p, ev, ctx, sys));
@@ -329,7 +353,7 @@ export function buildMaps(modId: string, specs: MapSpec[], src0: GameSource): Bu
 
         const data = clone(baseData);
         data.width = w; data.height = h; data.events = events;
-        if (spec.base === undefined) { data.displayName = spec.name; data.note = spec.note ?? ''; data.data = new Array(w * h * 6).fill(0); }
+        if (!hasBase) { data.displayName = spec.name; data.note = spec.note ?? ''; data.data = new Array(w * h * 6).fill(0); }
         else { if (spec.name) data.displayName = spec.name; if (spec.note !== undefined) data.note = spec.note; }
         if (spec.bgm) { data.bgm = audio(spec.bgm); data.autoplayBgm = true; }
 
@@ -349,6 +373,25 @@ export function buildMaps(modId: string, specs: MapSpec[], src0: GameSource): Bu
         files['patches/data/MapInfos.json.patch.json'] = JSON.stringify(ops, null, 2);
     }
     return { files, infos, errors, warnings };
+}
+
+// ------------------------------------------------------------------ safety
+/**
+ * Map ids listed in an existing MapInfos patch that none of this mod's specs produce. A patch like that was written by
+ * something else (a hand-made or script-built mod), and overwriting it would unregister those maps.
+ */
+export function foreignMapInfosIds(existingPatchText: string, specIds: Iterable<number>): number[] {
+    const ours = new Set(specIds);
+    let ops: any;
+    try { ops = JSON.parse(existingPatchText); } catch { return [-1]; }   // not JSON we understand: do not touch it
+    if (!Array.isArray(ops)) return [-1];
+    const foreign = new Set<number>();
+    for (const o of ops) {
+        const m = /^\/(\d+)$/.exec(String(o?.path ?? ''));
+        if (m && o.value !== null && !ours.has(Number(m[1]))) foreign.add(Number(m[1]));
+        else if (!m && o?.op !== 'test') foreign.add(-1);
+    }
+    return [...foreign].sort((a, b) => a - b);
 }
 
 // ------------------------------------------------------------------ preview

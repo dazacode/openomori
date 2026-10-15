@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join, resolve } from 'node:path';
 import { GAME_DIR, ROOT, WWW, readGameKey } from '../gamedir.ts';
 import { ModEngine } from './engine.ts';
-import { buildMaps, previewMap, type GameSource, type MapSpec } from './mapkit.ts';
+import { buildMaps, foreignMapInfosIds, previewMap, type GameSource, type MapSpec } from './mapkit.ts';
 import { scanStory, storyReport, type ScanSource, type StoryIndex } from './storyscan.ts';
 
 const dec = new TextDecoder();
@@ -27,7 +27,13 @@ export function gameSource(modDir?: string): GameSource {
         tiledMap: id => read(lower('maps', `map${id}.AUBREY`)),
         mapData: id => read(lower('data', `Map${String(id).padStart(3, '0')}.KEL`)),
         mapInfos: () => read('data/MapInfos.KEL'),
-        tileset: source => { try { return read(lower('maps', source.replace(/\.json$/i, '.AUBREY'))); } catch { return null; } },
+        tileset: source => {
+            try { return read(lower('maps', source.replace(/\.json$/i, '.AUBREY'))); } catch { /* not a game tileset */ }
+            const mine = modDir && join(modDir, 'files', 'maps', source);     // a tileset the mod ships itself
+            try { return mine && existsSync(mine) ? JSON.parse(readFileSync(mine, 'utf8')) : null; } catch { return null; }
+        },
+        snapshotTiled: id => JSON.parse(readFileSync(join(modDir!, 'maps', '.base', `${id}.tiled.json`), 'utf8')),
+        snapshotData: id => JSON.parse(readFileSync(join(modDir!, 'maps', '.base', `${id}.data.json`), 'utf8')),
         commonEventCount: () => (read('data/CommonEvents.KEL') as unknown[]).length - 1,
         systemCounts: () => { try { const s = read('data/System.KEL'); return { switches: s.switches.length - 1, variables: s.variables.length - 1 }; } catch { return null; } },
         pngSize: rel => {
@@ -53,22 +59,51 @@ export function loadSpecs(modDir: string): { file: string; spec: MapSpec }[] {
     return readdirSync(dir).filter(f => /\.spec\.json$/.test(f)).sort().map(f => ({ file: f, spec: JSON.parse(readFileSync(join(dir, f), 'utf8')) as MapSpec }));
 }
 
-/** Compile every maps/*.spec.json in a mod. Returns false if anything was wrong (nothing is written then). */
-export function buildMod(modArg: string, quiet = false): boolean {
-    const modDir = modDirOf(modArg);
-    if (!existsSync(join(modDir, 'mod.json'))) { console.error(`${modDir} has no mod.json`); return false; }
+/** Files the compiler would write that something else made. Nothing is written when this is not empty. */
+export function outputsOfOtherTools(modDir: string, specIds: number[], files: string[]): string[] {
+    const out: string[] = [], mine = new Set(specIds);
+    const patch = join(modDir, 'patches/data/MapInfos.json.patch.json');
+    if (files.includes('patches/data/MapInfos.json.patch.json') && existsSync(patch)) {
+        const foreign = foreignMapInfosIds(readFileSync(patch, 'utf8'), mine);
+        if (foreign.length) out.push(`patches/data/MapInfos.json.patch.json already registers maps this compiler did not make (${foreign.filter(n => n > 0).slice(0, 6).join(', ')}${foreign.length > 6 ? ', …' : ''}). Building would overwrite it and unregister them, so nothing was written. Keep that mod's own build for its maps, or move these specs into a separate mod.`);
+    }
+    for (const f of files) {
+        const m = /^files\/(?:maps\/map|data\/Map)(\d+)\.json$/.exec(f);
+        if (m && !mine.has(Number(m[1]))) out.push(`${f} would be overwritten but no spec makes map ${Number(m[1])}`);
+    }
+    return out;
+}
+
+export interface BuildResult { ok: boolean; errors: string[]; warnings: string[]; written: string[]; ids: number[] }
+
+/** Compile every maps/*.spec.json in a mod directory. Nothing is written if anything was wrong. Pure of console output. */
+export function buildModDir(modDir: string): BuildResult {
+    if (!existsSync(join(modDir, 'mod.json'))) return { ok: false, errors: [`${modDir} has no mod.json`], warnings: [], written: [], ids: [] };
     const id = JSON.parse(readFileSync(join(modDir, 'mod.json'), 'utf8')).id as string;
     const specs = loadSpecs(modDir);
-    if (!specs.length) { if (!quiet) console.log(`no maps/*.spec.json in ${modDir}`); return true; }
+    if (!specs.length) return { ok: true, errors: [], warnings: [], written: [], ids: [] };
     const built = buildMaps(id, specs.map(s => s.spec), gameSource(modDir));
-    for (const w of built.warnings) console.log(`! ${w}`);
-    for (const e of built.errors) console.log(`✗ ${e}`);
-    if (built.errors.length) { console.log(`nothing written: ${built.errors.length} error(s)`); return false; }
+    const ids = specs.map(x => x.spec.id);
+    if (built.errors.length) return { ok: false, errors: built.errors, warnings: built.warnings, written: [], ids };
+    const clash = outputsOfOtherTools(modDir, ids, Object.keys(built.files));
+    if (clash.length) return { ok: false, errors: clash, warnings: built.warnings, written: [], ids };
     for (const [rel, text] of Object.entries(built.files)) {
         mkdirSync(dirname(join(modDir, rel)), { recursive: true });
         writeFileSync(join(modDir, rel), text);
     }
-    console.log(`✓ built ${specs.map(x => x.spec.id).join(', ')} (${Object.keys(built.files).length} files)`);
+    return { ok: true, errors: [], warnings: built.warnings, written: Object.keys(built.files), ids };
+}
+
+/** Compile every maps/*.spec.json in a mod. Returns false if anything was wrong (nothing is written then). */
+export function buildMod(modArg: string, quiet = false): boolean {
+    const modDir = modDirOf(modArg);
+    if (!existsSync(join(modDir, 'mod.json'))) { console.error(`${modDir} has no mod.json`); return false; }
+    const r = buildModDir(modDir);
+    if (!r.ids.length) { if (!quiet) console.log(`no maps/*.spec.json in ${modDir}`); return true; }
+    for (const w of r.warnings) console.log(`! ${w}`);
+    for (const e of r.errors) console.log(`✗ ${e}`);
+    if (!r.ok) { console.log(`nothing written: ${r.errors.length} error(s)`); return false; }
+    console.log(`✓ built ${r.ids.join(', ')} (${r.written.length} files)`);
     return true;
 }
 
@@ -90,6 +125,14 @@ function show(args: string[]) {
     console.log(previewMap(t, (d.events as any[]).filter(Boolean).map(e => ({ x: e.x, y: e.y, name: e.name }))));
 }
 
+function list(args: string[]) {
+    const q = args.join(' ').trim().toLowerCase();
+    const infos = gameSource().mapInfos().filter(Boolean) as { id: number; name: string }[];
+    const rows = infos.filter(i => !q || String(i.id) === q || String(i.name).toLowerCase().includes(q));
+    for (const i of rows.slice(0, 200)) console.log(`${String(i.id).padStart(4)}  ${String(i.name).trim()}`);
+    console.log(rows.length > 200 ? `... ${rows.length - 200} more, narrow the search` : `${rows.length} map${rows.length === 1 ? '' : 's'}`);
+}
+
 function create(args: string[]) {
     const [modArg, idArg, name, size] = args;
     const m = /^(\d+)x(\d+)$/.exec(size ?? '');
@@ -109,13 +152,15 @@ function create(args: string[]) {
     console.log(`created ${p}\nEdit it, then: bun run mod map build ${modArg}   and   bun run mod map show ${modArg} ${id}`);
 }
 
-export function mapCommand(args: string[]) {
+export function mapCommand(args: string[]): void | Promise<void> {
     const [sub, ...rest] = args;
     switch (sub) {
         case 'new': create(rest); break;
         case 'build': process.exit(buildMod(rest[0] ?? '') ? 0 : 1);
         case 'show': show(rest); break;
-        default: console.log('bun run mod map new <mod> <id> "<Name>" <W>x<H> [--tiles-from <mapId>]   starter spec\nbun run mod map build <mod>                                          compile maps/*.spec.json into the mod\nbun run mod map show <mod> <id> | --game <id>                        ASCII picture (# blocked, . drawn, letters = events)');
+        case 'shot': return import('../../editor/shot.ts').then(m => m.shotCommand(rest));
+        case 'list': list(rest); break;
+        default: console.log('bun run mod map new <mod> <id> "<Name>" <W>x<H> [--tiles-from <mapId>]   starter spec\nbun run mod map build <mod>                                          compile maps/*.spec.json into the mod\nbun run mod map show <mod> <id> | --game <id>                        ASCII picture (# blocked, . drawn, letters = events)\nbun run mod map shot <mod> <id> | --game <id> [--out f.png]         a real picture (PNG) with tile numbers on the edges\nbun run mod map list [text]                                          find game maps by name or number');
     }
 }
 

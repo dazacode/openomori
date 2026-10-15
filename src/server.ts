@@ -1,11 +1,12 @@
 // Static server for the OMORI browser port: `bun run src/server.ts [port]`
 // Serves the game's www folder read-only, plus the built client bundle and a directory-listing endpoint.
 import { appendFileSync, readdirSync, statSync, watch, writeFileSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { delimiter, join, resolve, sep } from 'node:path';
 import { discoverMods } from './mods/vfs-node.ts';
 import { isOsJunk, treeToZip } from './mods/vfs.ts';
 import { ROOT, WWW, ensureGameDir, readGameKey } from './gamedir.ts';
 import { storyIndex } from './mods/mapkit-node.ts';
+import { createEditor } from '../editor/server.ts';
 
 if (!ensureGameDir()) process.exit(1);   // asks for your OMORI folder the first time
 
@@ -23,6 +24,15 @@ try {
     // Finder writes .DS_Store just from browsing a folder: that is not a change to any mod
     watch(MODS_DIR, { recursive: true }, (_ev, name) => { if (name && isOsJunk(String(name).replace(/\\/g, '/'))) return; clearTimeout(bump); bump = setTimeout(() => modsVersion++, 250); });
 } catch (e) { console.warn(`not watching ${MODS_DIR}: ${(e as Error).message}`); }
+
+// The map editor (editor/): a visual front end for the map compiler. Mod folders it can edit: the dev mods folder,
+// examples/, and anything listed in OMORI_EDITOR_MODS (folders separated by the OS path delimiter).
+// Folders in OMORI_EDITOR_MODS win over the dev folder: a mod's real source (omori-fanfic-mod-project/sunburn) beats its synced copy in mods/,
+// which `bun run sync` overwrites. After BUILD the editor copies the source into the dev folder so the game sees it.
+const editor = createEditor({
+    roots: [...(process.env.OMORI_EDITOR_MODS ?? '').split(delimiter).filter(Boolean).map(p => resolve(p)), MODS_DIR, join(ROOT, 'examples')],
+    mirrorTo: MODS_DIR,
+});
 
 const TYPES: Record<string, string> = { yaml: 'text/plain', yml: 'text/plain', md: 'text/plain', ogg: 'audio/ogg', webm: 'video/webm' };
 
@@ -73,6 +83,8 @@ const server = Bun.serve({
         const url = new URL(req.url);
         let rel: string;
         try { rel = decodeURIComponent(url.pathname); } catch { rel = url.pathname; } // some game files contain a literal '%'
+
+        if (rel === '/editor' || rel.startsWith('/editor/') || rel.startsWith('/__editor/')) return editor.handle(req, url).then(r => r ?? new Response('not found', { status: 404 }));
 
         if (rel === '/__config') {
             const key = readGameKey();

@@ -35,7 +35,7 @@
     "start": "bun run build.ts && bun run src/server.ts",
     "dev": "bun run build.ts --dev && bun --watch run src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun run build.ts && bun run mod map build story-demo && bun run mod map build edit-demo && bun test src && bun run test/smoke.ts && bun run test/debug-panel.ts && bun run test/checkpoints.ts && bun run test/story-demo.ts && bun run test/newgame-plus.ts && bun run test/cutscene.ts && bun run test/mods.ts && bun run test/settings.ts",
+    "test": "bun run build.ts && bun run mod map build story-demo && bun run mod map build edit-demo && bun test src editor && bun run test/smoke.ts && bun run test/debug-panel.ts && bun run test/checkpoints.ts && bun run test/story-demo.ts && bun run test/newgame-plus.ts && bun run test/cutscene.ts && bun run test/mods.ts && bun run test/settings.ts && bun run test/editor.ts",
     "mod": "bun run src/cli.ts"
   },
   "dependencies": {

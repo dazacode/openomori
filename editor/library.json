@@ -1,0 +1,23 @@
+{
+  "note": "Ready-made pieces and starting points, all copied from the game's own maps. rect is [x, y, width, height] in tiles. Add your own with 'Save as a piece' in the editor, or edit this file.",
+  "pieces": [
+    { "id": "street-row",    "group": "Outdoors", "name": "Street with four houses",        "map": 13, "rect": [0, 0, 70, 20] },
+    { "id": "house-pink",    "group": "Outdoors", "name": "Pink house with a garage",       "map": 13, "rect": [5, 4, 12, 11] },
+    { "id": "house-orange",  "group": "Outdoors", "name": "Orange house",                   "map": 13, "rect": [23, 4, 12, 11] },
+    { "id": "tree-wall",     "group": "Outdoors", "name": "Wall of trees",                  "map": 13, "rect": [0, 0, 20, 5] },
+    { "id": "road-poles",    "group": "Outdoors", "name": "Sidewalk, road and power poles", "map": 13, "rect": [0, 15, 20, 15] },
+    { "id": "basketball",    "group": "Outdoors", "name": "Basketball court",               "map": 63, "rect": [5, 11, 9, 14] },
+    { "id": "sand-clearing", "group": "Outdoors", "name": "Sandy clearing",                 "map": 63, "rect": [14, 13, 11, 11] },
+    { "id": "rooms-up",      "group": "Rooms",    "name": "Upstairs rooms",                 "map": 14, "rect": [14, 12, 13, 8] },
+    { "id": "hall-stairs",   "group": "Rooms",    "name": "Hallway and stairs",             "map": 14, "rect": [14, 20, 13, 8] },
+    { "id": "living-room",   "group": "Rooms",    "name": "Living room with a rug",         "map": 14, "rect": [42, 16, 14, 12] },
+    { "id": "piano-room",    "group": "Rooms",    "name": "Room with red curtain and piano", "map": 14, "rect": [44, 59, 8, 13] },
+    { "id": "bathroom",      "group": "Rooms",    "name": "Bathroom",                       "map": 14, "rect": [45, 41, 6, 8] }
+  ],
+  "templates": [
+    { "id": "blank",  "name": "Blank",                "blurb": "An empty outdoor map. Build it piece by piece.", "size": [30, 20], "tilesFrom": 13, "stamps": [] },
+    { "id": "street", "name": "A street",             "blurb": "Four houses, sidewalk and road, ready to walk around.", "size": [70, 20], "tilesFrom": 13, "stamps": [{ "piece": "street-row", "at": [0, 0] }] },
+    { "id": "park",   "name": "A park",               "blurb": "Basketball court, sandy clearing and trees.", "size": [54, 26], "tilesFrom": 63, "stamps": [{ "from": 63, "rect": [0, 4, 54, 26], "at": [0, 0] }] },
+    { "id": "house",  "name": "A house interior",     "blurb": "Two floors joined by stairs.", "size": [19, 18], "tilesFrom": 14, "stamps": [{ "from": 14, "rect": [14, 12, 13, 16], "at": [3, 1] }] }
+  ]
+}

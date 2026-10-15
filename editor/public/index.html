@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>OMORI Map Editor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Crect width='8' height='8' fill='%23000'/%3E%3Crect x='1' y='1' width='6' height='6' fill='%23fff'/%3E%3Crect x='2' y='2' width='4' height='4' fill='%23000'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="top">
+  <div class="brand"><b>MAP EDITOR</b><small>for OpenOMORI mods</small></div>
+  <label class="field">MOD <select id="modSel" title="The mod you are working on"></select></label>
+  <label class="field">MAP <select id="mapSel" title="Maps in this mod"></select></label>
+  <span class="sp"></span>
+  <button class="btn" id="undoBtn" title="Undo (Ctrl+Z)">UNDO</button>
+  <button class="btn" id="redoBtn" title="Redo (Ctrl+Shift+Z)">REDO</button>
+  <button class="btn" id="saveBtn" title="Save the map file (Ctrl+S)">SAVE<i id="dirtyDot" hidden></i></button>
+  <button class="btn primary" id="buildBtn" title="Save, then compile this mod's maps into game files (Ctrl+B)">BUILD ▶</button>
+  <button class="btn" id="helpBtn" title="Keys and how this works (?)">?</button>
+</header>
+
+<main id="work">
+  <nav id="left" aria-label="Tools and layers">
+    <h2>TOOLS</h2>
+    <div id="tools" role="toolbar"></div>
+    <h2>LAYERS <button class="mini" id="layersAll" title="Show or hide all layers">ALL</button></h2>
+    <div id="layers" role="listbox" aria-label="Tile layers"></div>
+    <h2>VIEW</h2>
+    <div class="checks">
+      <label><input type="checkbox" id="vGrid" checked> Grid <kbd>G</kbd></label>
+      <label><input type="checkbox" id="vWalls" checked> Walls <kbd>W</kbd></label>
+      <label><input type="checkbox" id="vEvents" checked> Events <kbd>V</kbd></label>
+      <label><input type="checkbox" id="vDim"> Dim other layers <kbd>D</kbd></label>
+      <label><input type="checkbox" id="vEdits"> Show my edits</label>
+      <label><input type="checkbox" id="vRuler"> Tile numbers</label>
+      <label><input type="checkbox" id="vTips" checked> Tips</label>
+    </div>
+  </nav>
+
+  <section id="stage" aria-label="Map">
+    <canvas id="map" tabindex="0"></canvas>
+    <div id="hud"><span id="hudLayer"></span></div>
+    <div id="empty">
+      <div class="win card">
+        <h1>OMORI MAP EDITOR</h1>
+        <p>Build maps for your mod without RPG Maker or Tiled.</p>
+        <p class="dim">Pick a mod above, then open a map or make a new one.</p>
+        <div class="row">
+          <button class="btn primary" id="emptyNew">NEW MAP</button>
+          <button class="btn" id="emptyEdit">EDIT A GAME MAP</button>
+        </div>
+      </div>
+    </div>
+    <div id="zoomBox">
+      <button class="mini" id="zOut" title="Zoom out (-)">−</button>
+      <span id="zVal">100%</span>
+      <button class="mini" id="zIn" title="Zoom in (+)">+</button>
+      <button class="mini" id="zFit" title="Fit map to window (0)">FIT</button>
+    </div>
+  </section>
+
+  <aside id="side">
+    <div id="tabs" role="tablist"></div>
+    <div id="coach" hidden></div>
+    <div id="panel"></div>
+  </aside>
+</main>
+
+<footer id="status">
+  <span id="hint">Pick a tool on the left.</span>
+  <span class="sp"></span>
+  <button class="problems" id="problemsBtn" hidden></button>
+  <span id="pos"></span>
+</footer>
+
+<div id="toasts" aria-live="polite"></div>
+<dialog id="dlg"></dialog>
+<script type="module" src="main.js"></script>
+</body>
+</html>

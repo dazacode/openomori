@@ -23,7 +23,7 @@ import { buildMaps } from './mods/mapkit.ts';
 import { artDecodeCommand, artKeyCommand, artSizesCommand, commandsCommand, lintCommand, macrosCommand, sayCommand } from './mods/omorikit-node.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
-if (['dump', 'check', 'routes'].includes(cmd ?? '') || (cmd === 'map' && ['build', 'show'].includes(args[0] ?? ''))) { if (!ensureGameDir()) process.exit(1); }
+if (['dump', 'check', 'routes'].includes(cmd ?? '') || (cmd === 'map' && ['build', 'show', 'shot', 'list'].includes(args[0] ?? ''))) { if (!ensureGameDir()) process.exit(1); }
 const dec = new TextDecoder();
 
 function walk(dir: string, rel = ''): string[] {
@@ -142,7 +142,7 @@ switch (cmd) {
     case 'new': scaffold(args[0], args[1]); break;
     case 'pack': pack(args[0], args[1]); break;
     case 'find': find(args.join(' ')); break;
-    case 'map': mapCommand(args); break;
+    case 'map': await mapCommand(args); break;
     case 'routes': routesCommand(args); break;
     case 'say': sayCommand(args); break;
     case 'macros': macrosCommand(); break;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildMaps, previewMap, type GameSource, type MapSpec } from './mapkit.ts';
+import { buildMaps, foreignMapInfosIds, previewMap, type GameSource, type MapSpec } from './mapkit.ts';
 
 const layer = (name: string, w: number, h: number, data?: number[]) => ({ type: 'tilelayer', name, width: w, height: h, data: data ?? new Array(w * h).fill(0), opacity: 1, visible: true, x: 0, y: 0 });
 // Source map 1: collision tileset first (gid 1), art tileset "A" at gid 25. Source map 2 has a different tileset order.
@@ -32,8 +32,8 @@ describe('mapkit', () => {
         expect(parse(b, 'files/data/Map1001.json').data.length).toBe(8 * 6 * 6);
         expect(b.files['files/languages/en/m_map1001.yml']).toContain('message_0:\n  text: "hi"');
         const ops = parse(b, 'patches/data/MapInfos.json.patch.json');
-        expect(ops.at(-1)).toMatchObject({ op: 'add', path: '/1001' });
-        expect(ops.filter((o: any) => o.path !== '/1001').every((o: any) => o.value === null)).toBe(true); // padded gap
+        // one `set` per new id: it pads the array with null up to the slot and never inserts, so other mods' ids do not shift
+        expect(ops).toEqual([{ op: 'set', path: '/1001', value: expect.objectContaining({ id: 1001, name: 'New' }) }]);
     });
     test('refuses ids the game already uses, and bad shapes', () => {
         expect(buildMaps('m', [spec({ id: 2 })], src()).errors[0]).toMatch(/already used by the game/);
@@ -113,6 +113,40 @@ describe('mapkit', () => {
         const first = t.tilesets.find((x: any) => x.source === 'MINE.json').firstgid;
         const L = t.layers[0].data;
         expect([L[1 * 8 + 1], L[1 * 8 + 2], L[2 * 8 + 1], L[2 * 8 + 2]]).toEqual([first, 0, first + 3, first + 5]);
+    });
+    test('an existing MapInfos patch is foreign unless every map in it comes from this mod\'s specs', () => {
+        const op = (id: number) => ({ op: 'set', path: `/${id}`, value: { id, name: 'x' } });
+        expect(foreignMapInfosIds(JSON.stringify([op(1001)]), [1001])).toEqual([]);
+        expect(foreignMapInfosIds(JSON.stringify([op(1001), op(1100), op(1101)]), [1001])).toEqual([1100, 1101]);
+        expect(foreignMapInfosIds(JSON.stringify([{ op: 'set', path: '/5', value: null }, op(7)]), [7])).toEqual([]);   // padding is fine
+        expect(foreignMapInfosIds('not json', [1])).toEqual([-1]);                                                      // never touch what we cannot read
+        expect(foreignMapInfosIds(JSON.stringify([{ op: 'replace', path: '/3/name', value: 'x' }]), [3])).toEqual([-1]);
+    });
+    test('snapshot: a map another tool builds can be edited on top of its own output, with no game map and no MapInfos entry', () => {
+        const mine = { ...map1, tilesets: [{ firstgid: 1, source: 'Tile_Collisions_32x32.json' }, { firstgid: 25, source: 'A.json' }] };
+        const mineData = { ...data, displayName: 'SCRIPT MAP', events: [null, { id: 1, name: 'orig', pages: [{ list: [] }], x: 0, y: 0 }, { id: 2, name: 'gone', pages: [], x: 1, y: 1 }] };
+        const b = buildMaps('m', [{ id: 1500, name: 'SCRIPT MAP', snapshot: true, removeEvents: [2], moveEvents: { 1: [3, 2] }, blocked: ['.#'], events: [{ name: 'added', x: 4, y: 3, do: [] }] }],
+            src({ snapshotTiled: () => mine, snapshotData: () => mineData }));
+        expect(b.errors).toEqual([]);
+        expect(b.warnings.join()).not.toMatch(/replaces the game/);
+        expect(Object.keys(b.files).some(f => f.includes('MapInfos'))).toBe(false);          // the tool that built it already registered it
+        const d = parse(b, 'files/data/Map1500.json');
+        expect(d.events[1]).toMatchObject({ name: 'orig', x: 3, y: 2, pages: [{ list: [] }] }); // moved, pages kept
+        expect(d.events[2]).toBeNull();
+        expect(d.events[3]).toMatchObject({ name: 'added', x: 4, y: 3 });
+        const t = parse(b, 'files/maps/map1500.json');
+        expect([t.width, t.height, t.layers[1].data[0], t.layers[1].data[1]]).toEqual([6, 4, 0, 1]);
+        expect(buildMaps('m', [{ id: 1500, snapshot: true, moveEvents: { 1: [99, 0] } }], src({ snapshotTiled: () => mine, snapshotData: () => mineData })).errors.join()).toMatch(/cannot move/);
+        expect(buildMaps('m', [{ id: 1500, snapshot: true }], src()).errors.join()).toMatch(/snapshot 1500/);   // no snapshot readers: a clear error
+    });
+    test('paint erase clears a rect on a layer, in order with other paint', () => {
+        const b = buildMaps('m', [spec({ stamps: [{ from: 1, rect: [0, 0, 6, 4], at: [0, 0] }], paint: [{ layer: 'GROUND - I', erase: true, rect: [1, 0, 2, 1] }, { layer: 'GROUND - I', erase: true, at: [0, 1] }] })], src());
+        expect(b.errors).toEqual([]);
+        const L = parse(b, 'files/maps/map1001.json').layers[0].data;
+        expect([L[0], L[1], L[2], L[3], L[8], L[9]]).not.toContain(undefined);
+        expect([L[1], L[2], L[8]]).toEqual([0, 0, 0]);
+        expect(L[0]).not.toBe(0);
+        expect(buildMaps('m', [spec({ paint: [{ layer: 'GROUND - I', erase: true, rect: [7, 5, 3, 1] }] })], src()).errors.join()).toMatch(/erase rect/);
     });
     test('paint and tileset errors are specific', () => {
         const e = (o: Partial<MapSpec>) => buildMaps('m', [spec(o)], src()).errors.join('|');
