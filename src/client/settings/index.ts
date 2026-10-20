@@ -17,13 +17,27 @@ const download = (name: string, text: string, type = 'application/json') => {
 
 export { openSettings, closeSettings, isOpen };
 
+// The keys panel lets an action lose all its keys; the options menu then crashes on the title screen
+// (it looks every action up in the key map). Give any unbound action its default key back on load.
+function backfillBindings(CM: any) {
+    for (const [prop, setDefault] of [['keyMapper', 'setDefaultKeyboardKeyMap'], ['gamepadMapper', 'setDefaultGamepadKeyMap']] as const) {
+        const cur: Record<string, string> = g.Input[prop];
+        if (!cur) continue;
+        CM[setDefault]();
+        const def: Record<string, string> = g.Input[prop];
+        g.Input[prop] = cur;
+        const bound = new Set(Object.values(cur));
+        for (const [code, action] of Object.entries(def)) if (!bound.has(action)) { cur[code] = action; bound.add(action); }
+    }
+}
+
 export function installSettings() {
     const CM = g.ConfigManager;
 
     // ---- persistence: port + mod values live inside the game's own config file
     const makeData = CM.makeData, applyData = CM.applyData;
     CM.makeData = function (this: any) { const c = makeData.call(this); c.omoriWeb = exportBag(); return c; };
-    CM.applyData = function (this: any, config: any) { applyData.call(this, config); importBag(config?.omoriWeb); };
+    CM.applyData = function (this: any, config: any) { applyData.call(this, config); backfillBindings(this); importBag(config?.omoriWeb); };
 
     F.setPanelOpenCheck(isOpen);
     F.installSplashSkip();
