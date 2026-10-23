@@ -1,0 +1,10 @@
+{
+  "id": "story-select",
+  "name": "Story select",
+  "version": "0.1.0",
+  "author": "OpenOMORI",
+  "description": "Settings > Mods > Story select: jump to any day and scene of the main story (Day 0 to the end), grouped by day and by Headspace / Faraway. Sets the story switches, party and levels for that point.",
+  "scripts": [
+    "scripts/story-select.js"
+  ]
+}
