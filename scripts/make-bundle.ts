@@ -4,17 +4,26 @@
 // runs on any static host - an app store, a school web server, a USB stick. It is the same game, just without the Bun
 // dev server: the manifest carries the game key and every directory listing (see src/client/staticBundle.ts).
 //
-// Your install is never changed; the game's files are copied as they are (they stay encrypted, exactly as the Steam
-// build ships them). Mods from ./mods are packed in as zips (the dev-folder mods), minus anything excluded.
+// `data/`, `maps/` and `languages/` are shipped DECRYPTED (same file names, plain content) and the manifest says
+// `plain: true`, so the client skips the game's own AES step. The point is compression: AES output does not compress
+// at all, while the same bytes as JSON/YAML gzip about 60x (the game reads every map at boot) - the host must then
+// actually compress them (Caddy `encode zstd gzip` + a JSON/YAML content type for those extensions). Plugin scripts
+// stay encrypted (the loader always decrypts them) and images/audio keep RPG Maker's own scheme. `--no-plain` keeps
+// the retail form.
+//
+// Your install is never changed; mods from ./mods are packed in as zips (the dev-folder mods), minus anything excluded.
 //
 //   bun run bundle                       -> ./bundle and ./bundle.zip
 //   bun run bundle --out=/tmp/omori-web  -> somewhere else
 //   bun run bundle --exclude-mods=sunburn,other
+//   bun run bundle --no-plain            -> keep the game's data encrypted (the retail form)
 //   bun run bundle --no-zip --no-build   -> folder only, reuse the last client build
-import { readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { cp, mkdir } from 'node:fs/promises';
 import { join, posix, resolve } from 'node:path';
 import { GAME_DIR, ROOT, WWW, ensureGameDir, readGameKey } from '../src/gamedir.ts';
+import { ModEngine } from '../src/mods/engine.ts';
+import { formatOfGamePath } from '../src/mods/manifest.ts';
 import { storyIndex } from '../src/mods/mapkit-node.ts';
 import { treeToZip } from '../src/mods/vfs.ts';
 import { discoverMods } from '../src/mods/vfs-node.ts';
@@ -35,6 +44,9 @@ const rmrf = (p: string) => { if (statSync(p, { throwIfNoEntry: false })) rmSync
 
 const key = readGameKey();
 if (!key) process.exit(1);
+
+/** `--no-plain` keeps the game data encrypted (the retail form); the default ships it decrypted so text can compress. */
+const plain = !flag('no-plain');
 
 const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
 
@@ -89,7 +101,21 @@ for (const label of excluded) if (!found.some(m => m.label === label)) console.l
 const junk = (rel: string) => rel.split('/').some(s => s.startsWith('.')) || /(^|\/)__MACOSX(\/|$)/.test(rel);
 for (const [full, rel] of collect()) if (junk(rel)) rmrf(full);
 
-// 4. the manifest: the key, and every directory's listing (what /__config and /__ls answered in dev)
+// 4. decrypt the game's text data (`data/`, `maps/`, `languages/`): AES output does not compress, plain JSON does.
+//    Plugin scripts stay encrypted (the loader always decrypts them) and images/audio keep RPG Maker's own scheme.
+let plainned = 0;
+if (plain) {
+    const engine = new ModEngine(() => key);
+    for (const [full, rel] of collect()) {
+        if (!formatOfGamePath(rel).encrypted || /^js\/plugins\//i.test(rel)) continue;
+        const bytes = new Uint8Array(readFileSync(full));
+        writeFileSync(full, engine.decrypt(bytes));
+        plainned++;
+    }
+    console.log(`decrypted ${plainned} game data files`);
+}
+
+// 5. the manifest: the key, and every directory's listing (what /__config and /__ls answered in dev)
 const dirs: Record<string, string[]> = { '': [] };
 for (const [, rel, isDir] of collect()) {
     const parent = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
@@ -97,10 +123,10 @@ for (const [, rel, isDir] of collect()) {
     (dirs[parent] ??= []).push(posix.basename(rel));
 }
 dirs['']!.push(posix.basename(join(out, 'omori-bundle.json')));   // written below, so list it by hand
-writeFileSync(join(out, 'omori-bundle.json'), JSON.stringify({ key, dirs, mods, story: storyIndex(), built: new Date().toISOString() }));
+writeFileSync(join(out, 'omori-bundle.json'), JSON.stringify({ key, dirs, mods, story: storyIndex(), plain, built: new Date().toISOString() }));
 console.log('wrote omori-bundle.json');
 
-// 5. a .zip next to it, ready to upload (the whole point of the exercise)
+// 6. a .zip next to it, ready to upload (the whole point of the exercise)
 const files = collect().filter(([, , isDir]) => !isDir);
 const bytes = files.reduce((n, [full]) => n + statSync(full).size, 0);
 if (!flag('no-zip')) {

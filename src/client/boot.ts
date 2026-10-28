@@ -9,7 +9,7 @@ import { installModUi } from './mods/ui.ts';
 import { installSettings } from './settings/index.ts';
 import { listAsync, prefetch, shimReady } from './shim/index.ts';
 import { nw } from './shim/nw.ts';
-import { bundleMode } from './staticBundle.ts';
+import { bundleMode, bundlePlain } from './staticBundle.ts';
 
 const LIBS = ['pixi', 'pixi-tilemap', 'pixi-picture', 'lz-string', 'iphone-inline-video.browser'].map(n => `js/libs/${n}.js`);
 const CORE = ['rpg_core', 'rpg_managers', 'rpg_objects', 'rpg_scenes', 'rpg_sprites', 'rpg_windows', 'plugins'].map(n => `js/${n}.js`);
@@ -47,6 +47,7 @@ export async function boot(): Promise<void> {
     mark("core-scripts");
     await warm; mark("cache-warm");
     await runPhase('pre-plugins');
+    installPlainData();
     patchPlugins();                  // mods' own plugins + plugin_parameters, after their pre-injection scripts
     PluginManager.setup($plugins);   // plugins (and their Graphics overrides) load synchronously here
     mark("plugins");
@@ -60,8 +61,40 @@ export async function boot(): Promise<void> {
     installSettings();               // replaces the game's options screens; after plugins so ConfigManager is final
     SceneManager.run(Scene_Boot);
     mark("run");
+    hideBootScreen();
     await runPhase('ready');
     startHotReload();
+}
+
+/** Take the loading screen (public/index.html) away once the game has a screen of its own. */
+function hideBootScreen() {
+    const el = document.getElementById('boot');
+    if (!el) return;
+    const t0 = Date.now();
+    const tick = setInterval(() => {
+        const scene = (globalThis as any).SceneManager?._scene?.constructor?.name as string | undefined;
+        if ((scene && scene !== 'Scene_Boot') || Date.now() - t0 > 30000) {
+            clearInterval(tick);
+            el.classList.add('hide');
+            setTimeout(() => el.remove(), 400);
+        }
+    }, 100);
+}
+
+/**
+ * A static bundle ships `data/`, `maps/` and `languages/` decrypted (they compress, and the AES round trip goes away),
+ * while the game decrypts whatever it reads with its own `Encryption` class. That class is created by a plugin during
+ * `PluginManager.setup`, so intercept the global assignment and make `decrypt` the identity. Plugin scripts stay
+ * encrypted, and images/audio keep RPG Maker's own scheme (handled by `Decrypter`, not this class).
+ */
+function installPlainData() {
+    if (!bundlePlain()) return;
+    let cls: any;
+    Object.defineProperty(globalThis, 'Encryption', {
+        configurable: true,
+        get: () => cls,
+        set(v) { cls = v; if (v && typeof v.decrypt === 'function') v.decrypt = (b: Uint8Array) => b; },
+    });
 }
 
 /** `?hot=1`: reload when the dev ./mods folder changes (for authors iterating on a mod). */

@@ -14,7 +14,10 @@ const enoent = (p: string, op: string): NodeJS.ErrnoException =>
     Object.assign(new Error(`ENOENT: no such file or directory, ${op} '${p}'`), { code: 'ENOENT', errno: -2, path: p });
 
 export const keyOf = (p: string): string => path.normalize('/' + String(p)).replace(/^\/+|\/+$/g, '');
-const urlOf = (k: string): string => '/' + bundleResolve(k).split('/').map(encodeURIComponent).join('/');
+/** The canonical cache key: the real on-disk spelling. The game asks for `/Languages/` where the folder is
+ *  `languages/`, and a prefetch of the lowercase path must be the same entry the game's read then finds. */
+const canon = (k: string): string => bundleResolve(k);
+const urlOf = (k: string): string => '/' + canon(k).split('/').map(encodeURIComponent).join('/');
 const encodingOf = (o: Encoding): string | undefined => (typeof o === 'string' ? o : o?.encoding ?? undefined);
 
 // ------------------------------------------------------------------ network layer
@@ -71,31 +74,33 @@ async function fetchAsync(k: string): Promise<Uint8Array | null> {
 }
 
 function listSync(k: string): string[] | null {
-    if (lsCache.has(k)) return lsCache.get(k)!;
+    const ck = canon(k);
+    if (lsCache.has(ck)) return lsCache.get(ck)!;
     let res: string[] | null = null;
-    if (bundleMode()) res = bundleDir(bundleResolve(k));
+    if (bundleMode()) res = bundleDir(ck);
     else {
         const xhr = new XMLHttpRequest();
         xhr.open('GET', '/__ls?p=' + encodeURIComponent(k), false);
         try { xhr.send(); if (xhr.status === 200) res = JSON.parse(xhr.responseText); } catch { /* offline */ }
     }
-    res = withAdded(res, k);
-    lsCache.set(k, res);
+    res = withAdded(res, ck);
+    lsCache.set(ck, res);
     return res;
 }
 
 /** Warm the cache in parallel so the game's sync reads at boot don't stall. */
 export async function prefetch(keys: string[]): Promise<void> {
     await Promise.all(keys.map(async k => {
-        if (cache.has(k)) return;
+        const ck = canon(k);
+        if (cache.has(ck)) return;
         const u = await fetchAsync(k);
-        if (u) cache.set(k, u);
+        if (u) cache.set(ck, u);
     }));
 }
 export async function listAsync(dir: string): Promise<string[]> {
     const k = keyOf(dir);
-    if (bundleMode()) return withAdded(bundleDir(bundleResolve(k)), k) ?? [];
-    try { const r = await fetch('/__ls?p=' + encodeURIComponent(dir)); return withAdded(r.ok ? await r.json() : null, k) ?? []; } catch { return withAdded(null, k) ?? []; }
+    if (bundleMode()) return withAdded(bundleDir(canon(k)), canon(k)) ?? [];
+    try { const r = await fetch('/__ls?p=' + encodeURIComponent(dir)); return withAdded(r.ok ? await r.json() : null, canon(k)) ?? []; } catch { return withAdded(null, canon(k)) ?? []; }
 }
 
 // ------------------------------------------------------------------ writable overlay (IndexedDB)
@@ -141,11 +146,11 @@ const bytesOf = (data: string | Uint8Array): Uint8Array =>
 function lookup(k: string): Uint8Array | null | undefined {
     if (overlay.has(k)) return overlay.get(k);
     if (modLayer?.has(k)) {
-        if (!modded.has(k)) modded.set(k, modLayer.resolve(k, () => cache.get(k) ?? fetchSync(k)));
+        if (!modded.has(k)) modded.set(k, modLayer.resolve(k, () => cache.get(canon(k)) ?? fetchSync(k)));
         const m = modded.get(k);
         if (m) return m;
     }
-    return cache.get(k);
+    return cache.get(canon(k));
 }
 
 interface Stats { isDirectory(): boolean; isFile(): boolean; size: number }
@@ -154,7 +159,7 @@ export const fs = {
     readFileSync(p: string, o?: Encoding) {
         const k = keyOf(p);
         let u = lookup(k);
-        if (u === undefined) { u = fetchSync(k); if (u) cache.set(k, u); }
+        if (u === undefined) { u = fetchSync(k); if (u) cache.set(canon(k), u); }
         if (!u) throw enoent(p, 'open');
         return asBuffer(u, encodingOf(o));
     },
@@ -167,14 +172,14 @@ export const fs = {
             return;
         }
         fetchAsync(k).then(u => {
-            if (u) cache.set(k, u);
+            if (u) cache.set(canon(k), u);
             u ? cb!(null, asBuffer(u, enc)) : cb!(enoent(p, 'open'));
         });
     },
     existsSync(p: string): boolean {
         const k = keyOf(p);
         if (overlay.has(k)) return overlay.get(k) !== null;
-        if (overlayDirs.has(k) || cache.has(k) || modLayer?.has(k)) return true;
+        if (overlayDirs.has(k) || cache.has(canon(k)) || modLayer?.has(k)) return true;
         for (const [ok, v] of overlay) if (v && ok.startsWith(k + '/')) return true;
         if (missing.has(k)) return false;
         if (listSync(k)) return true;

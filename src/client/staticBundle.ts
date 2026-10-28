@@ -18,6 +18,8 @@ interface Manifest {
     dirs: Record<string, string[]>;
     mods: BundleMod[];
     story: unknown | null;
+    /** the bundle ships the game's data/maps/languages already decrypted (see scripts/make-bundle.ts) */
+    plain?: boolean;
 }
 
 const MANIFEST = 'omori-bundle.json';
@@ -45,6 +47,8 @@ export const bundleKey = (): string | null => manifest?.key ?? null;
 export const bundleMods = (): BundleMod[] | null => (manifest ? manifest.mods ?? [] : null);
 export const bundleStory = (): unknown | null => manifest?.story ?? null;
 export const bundleDir = (key: string): string[] | null => manifest?.dirs[key] ?? null;
+/** True when the game's AES-encrypted files are already plain on disk: no decrypt step, and text travels compressed. */
+export const bundlePlain = (): boolean => manifest?.plain === true;
 
 /**
  * The real, case-correct path for `key`, matching the dev server's tolerance for wrong case (`/Languages/` -> the

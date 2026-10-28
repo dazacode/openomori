@@ -40,12 +40,22 @@ try {
         return { type: r.headers.get('content-type'), hasKey: typeof (await r.json()).key === 'string' };
     });
     check(headers.hasKey, `the bundle manifest is served (${headers.type})`);
+    await new Promise(r => setTimeout(r, 3000));
+    let tabText = await page.evaluate(() => document.getElementById('omm-tab')?.textContent ?? '(none)');
+    console.log('mod tab while booting:', tabText);
     await page.waitForFunction(() => (globalThis as any).SceneManager?._scene?.constructor?.name === 'Scene_OmoriTitleScreen', { timeout: 180000 }).catch(async e => {
         const scene = await page.evaluate(() => (globalThis as any).SceneManager?._scene?.constructor?.name ?? 'no scene');
         console.error(`title wait failed (scene: ${scene})`, hard.slice(0, 6));
         throw e;
     });
     console.log(`title reached in ${Date.now() - t0} ms`);
+    const marks = await page.evaluate(() => performance.getEntriesByType('mark').map(m => `${m.name.replace('omori:', '')}=${Math.round(m.startTime)}`).join(' '));
+    console.log('boot marks (ms):', marks);
+    tabText = await page.evaluate(() => document.getElementById('omm-tab')?.textContent ?? '(none)');
+    console.log('mod tab after boot:', tabText);
+    const st = await page.evaluate(() => ({ title: (globalThis as any).$dataSystem?.gameTitle, items: (globalThis as any).$dataItems?.length, maps: (globalThis as any).$dataMapInfos?.length }));
+    check(st.title === 'OMORI' && (st.items ?? 0) > 900 && (st.maps ?? 0) > 400, `the game's databases parsed (${st.title}, ${st.items} items, ${st.maps} maps)`);
+    check(tabText === 'Mods', `no mod errors on boot (mod tab "${tabText}")`);
     await new Promise(r => setTimeout(r, 1500));
     await page.screenshot({ path: join(import.meta.dir, 'out', 'published-title.png') });
     check(hard.length === 0, `no page errors${hard.length ? `: ${hard.slice(0, 4).join(' | ')}` : ''}`);

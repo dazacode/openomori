@@ -33,6 +33,11 @@ export interface LoadedMod extends ModDef {
 const dec = new TextDecoder(), enc = new TextEncoder();
 const BOM = /^﻿/;
 
+/** Files the game keeps AES-encrypted at rest (`.KEL`, `.PLUTO`, `.AUBREY`, `.HERO`, plugin scripts). */
+const aesAtRestPath = (gamePath: string) => formatOfGamePath(gamePath).crypt === 'aes';
+/** The plugin loader always decrypts its scripts, so a bundle never ships those plain. */
+const PLUGIN_PATH = /^js\/plugins\//i;
+
 /** RPG Maker MV's encrypted-asset header: "RPGMV" + version + padding. */
 const RPG_HEADER = new Uint8Array([0x52, 0x50, 0x47, 0x4d, 0x56, 0, 0, 0, 0x00, 0x03, 0x01, 0, 0, 0, 0, 0]);
 
@@ -50,6 +55,14 @@ export class ModEngine {
     version = 0;
     /** set by the host once it has read the game's System data; needed to encode replaced images and audio */
     assetKey: Uint8Array | null = null;
+    /**
+     * A static bundle (`scripts/make-bundle.ts --plain`) can ship the AES-encrypted game files already decrypted, so
+     * there is nothing to decrypt and edited files are not re-encrypted. Plugin scripts stay encrypted (the loader
+     * decrypts them unconditionally), and images/audio keep RPG Maker's own scheme.
+     */
+    plainPacked = false;
+    /** Is this path plain on disk although the retail game keeps it AES-encrypted? */
+    plainAtRest(gamePath: string) { return this.plainPacked && aesAtRestPath(gamePath) && !PLUGIN_PATH.test(gamePath); }
     private edits = new Map<string, { mod: LoadedMod; edit: Edit }[]>(); // lowercase game path -> ordered edits
     private generated = new Map<string, Uint8Array>(); // finished bytes made by other code (patched images)
     private cache = new Map<string, { sig: string; bytes: Uint8Array }>();
@@ -227,6 +240,7 @@ export class ModEngine {
         if (hit?.sig === sig) return hit.bytes;
 
         const target = formatOfGamePath(gamePath);
+        const atRest = this.plainAtRest(gamePath); // plain on disk: skip the AES step at both ends
         let base: Uint8Array | null | undefined; // undefined = not loaded yet
         const loadBase = () => (base === undefined ? (base = baseBytes()) : base);
         let plain: Uint8Array | null = null; // null = "still the original"
@@ -238,7 +252,7 @@ export class ModEngine {
             if (plain) return plain;
             const b = loadBase();
             if (!b) throw new PatchError(`game file ${gamePath} does not exist, so it cannot be patched`);
-            return target.crypt === 'aes' ? this.decrypt(b) : b;
+            return target.crypt === 'aes' && !atRest ? this.decrypt(b) : b;
         };
         const asValue = (): unknown => {
             if (haveValue) return value;
@@ -285,7 +299,7 @@ export class ModEngine {
         if (applied === 0 && plain === null) return null; // every edit failed: fall back to the original file
         let out = plain ?? new Uint8Array();
         if (!final) {
-            if (target.crypt === 'aes') out = this.encrypt(out);
+            if (target.crypt === 'aes') { if (!atRest) out = this.encrypt(out); }
             else if (target.crypt === 'rpg') out = this.encryptAsset(out);
         }
         this.cache.set(gamePath.toLowerCase(), { sig, bytes: out });

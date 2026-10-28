@@ -9,6 +9,7 @@ import { installModLoaderShim, runExec, type ModLoaderShim } from './compat.ts';
 import { applyImageDeltas } from './olid.ts';
 import { patchPluginList } from './plugins.ts';
 import { enabledKeys, getActiveProfile, listMods, replaceGenerated, setMeta, syncServerMods, type ModRecord, type Profile } from './store.ts';
+import { bundlePlain } from '../staticBundle.ts';
 
 export const SAFE_MODE = new URLSearchParams(location.search).get('mods') === '0';
 
@@ -37,7 +38,8 @@ function bootStatus() {
 async function prepareAssetKey(): Promise<void> {
     const r = await fetch('/data/System.KEL', { cache: 'no-store' });
     if (!r.ok) throw new Error('could not read the game\'s System data');
-    const system = JSON.parse(new TextDecoder().decode(engine.decrypt(new Uint8Array(await r.arrayBuffer()))));
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    const system = JSON.parse(new TextDecoder().decode(engine.plainAtRest('data/System.KEL') ? bytes : engine.decrypt(bytes)));
     engine.assetKey = assetKeyFromSystem(system);
     await setMeta('assetKey', hex(engine.assetKey)); // the service worker has no game key, so it reads this
 }
@@ -45,6 +47,7 @@ async function prepareAssetKey(): Promise<void> {
 /** Load installed mods and plug them into the game's file layer. Never throws: a broken mod store means "no mods". */
 export async function initMods(gameKey: string): Promise<void> {
     key = gameKey;
+    engine.plainPacked = bundlePlain(); // a static bundle ships data/maps/languages decrypted: no AES round trip in, or out
     try {
         profile = await getActiveProfile();
         records = (await listMods()).sort((a, b) => a.key.localeCompare(b.key));

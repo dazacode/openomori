@@ -63,6 +63,11 @@ try {
         args: ['--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--enable-gpu', ANGLE],
     });
     const page = await browser.newPage();
+    if (process.env.THROTTLE) {   // pretend the origin is far away: 160 ms RTT, ~1.6 MB/s
+        const cdp = await page.createCDPSession();
+        await cdp.send('Network.enable');
+        await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 160, downloadThroughput: 1.6 * 1024 * 1024, uploadThroughput: 1 * 1024 * 1024 });
+    }
     // hard: a page crash, a failed request, a 5xx. soft: the game's own "does this file exist yet" 404s (/appdata, /save).
     const hard: string[] = [];
     const soft: string[] = [];
@@ -78,16 +83,21 @@ try {
 
     const t0 = Date.now();
     await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
+    await new Promise(r => setTimeout(r, 1200));
+    await page.screenshot({ path: join(import.meta.dir, 'out', 'bundle-boot.png') });
     await page.waitForFunction(() => (globalThis as any).SceneManager?._scene?.constructor?.name === 'Scene_OmoriTitleScreen', { timeout: 120000 }).catch(async e => {
         const scene = await page.evaluate(() => (globalThis as any).SceneManager?._scene?.constructor?.name ?? 'no scene');
         console.error(`title wait failed (scene: ${scene})`, hard.slice(0, 8));
         throw e;
     });
     console.log(`title reached in ${Date.now() - t0} ms`);
+    console.log('boot marks (ms):', await page.evaluate(() => performance.getEntriesByType('mark').map(m => `${m.name.replace('omori:', '')}=${Math.round(m.startTime)}`).join(' ')));
     await new Promise(r => setTimeout(r, 1500));
     await page.screenshot({ path: join(import.meta.dir, 'out', 'bundle-title.png') });
 
-    // the mods baked into ./mods are offered to the mod manager (F8)
+    // the mods baked into ./mods are offered to the mod manager (F8), and nothing should have errored during boot
+    const tab = await page.evaluate(() => document.getElementById('omm-tab')?.textContent ?? '(none)');
+    check(tab === 'Mods', `mod manager tab is clean (got "${tab}")`);
     await page.keyboard.press('F8');
     await new Promise(r => setTimeout(r, 800));
     const modsText = await page.evaluate(() => document.body.innerText);
@@ -96,8 +106,9 @@ try {
     check(!/SUNBURN|Sunburn/.test(modsText), 'the SUNBURN mod is not in the bundle');
     await page.screenshot({ path: join(import.meta.dir, 'out', 'bundle-mods.png') });
 
-    const st = await page.evaluate(() => ({ lang: (globalThis as any).$dataSystem?.locale }));
+    const st = await page.evaluate(() => ({ lang: (globalThis as any).$dataSystem?.locale, title: (globalThis as any).$dataSystem?.gameTitle, items: (globalThis as any).$dataItems?.length, maps: (globalThis as any).$dataMapInfos?.length }));
     check(!!st.lang, `game data loaded from the bundle (locale ${String(st.lang)})`);
+    check(st.title === 'OMORI' && (st.items ?? 0) > 900 && (st.maps ?? 0) > 400, `the game's databases parsed (${st.title}, ${st.items} items, ${st.maps} maps)`);
     check(hard.length === 0, `no page errors${hard.length ? `: ${hard.slice(0, 4).join(' | ')}` : ''}`);
     if (soft.length) console.log(`      (${soft.length} expected 404s, e.g. ${soft[0]})`);
     await browser.close();
