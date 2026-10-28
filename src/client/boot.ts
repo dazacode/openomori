@@ -9,6 +9,7 @@ import { installModUi } from './mods/ui.ts';
 import { installSettings } from './settings/index.ts';
 import { listAsync, prefetch, shimReady } from './shim/index.ts';
 import { nw } from './shim/nw.ts';
+import { bundleMode } from './staticBundle.ts';
 
 const LIBS = ['pixi', 'pixi-tilemap', 'pixi-picture', 'lz-string', 'iphone-inline-video.browser'].map(n => `js/libs/${n}.js`);
 const CORE = ['rpg_core', 'rpg_managers', 'rpg_objects', 'rpg_scenes', 'rpg_sprites', 'rpg_windows', 'plugins'].map(n => `js/${n}.js`);
@@ -65,6 +66,7 @@ export async function boot(): Promise<void> {
 
 /** `?hot=1`: reload when the dev ./mods folder changes (for authors iterating on a mod). */
 function startHotReload() {
+    if (bundleMode()) return; // a bundle's mods are files; a rebuild replaces them
     if (new URLSearchParams(location.search).get('hot') !== '1') return;
     let last: number | null = null;
     setInterval(async () => {

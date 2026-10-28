@@ -1,4 +1,5 @@
 import { isLoaded, portValue, register, type Choice } from '../settings/registry.ts';
+import { bundleMode } from '../staticBundle.ts';
 
 // window.OmoriMod: the API mod scripts program against, plus error capture that blames the right mod.
 // Everything a mod does through this API is wrapped so one broken mod logs an error instead of killing the game.
@@ -25,6 +26,7 @@ const hookErrors = new WeakMap<object, number>();
 export const blame = (text?: string): string | null => MOD_URL.exec(text ?? '')?.[1] ?? null;
 
 function send(level: string, mod: string, message: string) {
+    if (bundleMode()) return; // no dev server to write latest.log; the console line below is the record
     try { void fetch('/__mods/log', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ level, mod, message }), keepalive: true }); } catch { /* offline */ }
 }
 

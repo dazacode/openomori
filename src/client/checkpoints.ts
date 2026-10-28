@@ -8,6 +8,7 @@ import { getActiveProfile } from './mods/store.ts';
 import { portValue, register } from './settings/registry.ts';
 import type { StoryIndex } from '../mods/storyscan.ts';
 import { ENDING_FLAGS, PHASE_FLAGS, SPINE_SWITCH, coverage, describe, routeKey, routeLabel, signature } from './story-model.ts';
+import { bundleStory } from './staticBundle.ts';
 
 export interface Checkpoint {
     id: string;
@@ -275,8 +276,12 @@ export const describeCheckpoint = (cp: Checkpoint) => describe(checkpointSignatu
 export const checkpointRoute = (cp: Checkpoint) => routeLabel(checkpointSignature(cp));
 
 let storyP: Promise<StoryIndex | null> | null = null;
-/** The story's flags as scanned from this install by the dev server (null if unavailable). Fetched once. */
-export const loadStory = () => (storyP ??= fetch('/__story.json').then(r => (r.ok ? (r.json() as Promise<StoryIndex>) : null)).catch(() => null));
+/** The story's flags as scanned from this install (null if unavailable). Baked into a static bundle, else fetched once. */
+export const loadStory = (): Promise<StoryIndex | null> => (storyP ??= (async () => {
+    const baked = bundleStory() as StoryIndex | null;
+    if (baked) return baked;
+    try { const r = await fetch('/__story.json'); return r.ok ? (await r.json()) as StoryIndex : null; } catch { return null; }
+})());
 /** Names of the story-progress switches that some event actually turns on (the rest are reserved names that can never happen). */
 export const settableBeats = (ix: StoryIndex) => [...ix.spine, ...ix.phase, ...ix.endings].filter(f => f.setCount > 0).map(f => f.name.trim());
 

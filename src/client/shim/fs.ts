@@ -2,6 +2,7 @@
 // game uses callbacks); everything the game writes lives in an overlay persisted to IndexedDB.
 import { Buffer } from 'buffer';
 import path from 'path-browserify';
+import { bundleDir, bundleMode, bundleResolve } from '../staticBundle.ts';
 
 type Encoding = string | { encoding?: string | null } | null | undefined;
 type Cb<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
@@ -13,7 +14,7 @@ const enoent = (p: string, op: string): NodeJS.ErrnoException =>
     Object.assign(new Error(`ENOENT: no such file or directory, ${op} '${p}'`), { code: 'ENOENT', errno: -2, path: p });
 
 export const keyOf = (p: string): string => path.normalize('/' + String(p)).replace(/^\/+|\/+$/g, '');
-const urlOf = (k: string): string => '/' + k.split('/').map(encodeURIComponent).join('/');
+const urlOf = (k: string): string => '/' + bundleResolve(k).split('/').map(encodeURIComponent).join('/');
 const encodingOf = (o: Encoding): string | undefined => (typeof o === 'string' ? o : o?.encoding ?? undefined);
 
 // ------------------------------------------------------------------ network layer
@@ -71,10 +72,13 @@ async function fetchAsync(k: string): Promise<Uint8Array | null> {
 
 function listSync(k: string): string[] | null {
     if (lsCache.has(k)) return lsCache.get(k)!;
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', '/__ls?p=' + encodeURIComponent(k), false);
     let res: string[] | null = null;
-    try { xhr.send(); if (xhr.status === 200) res = JSON.parse(xhr.responseText); } catch { /* offline */ }
+    if (bundleMode()) res = bundleDir(bundleResolve(k));
+    else {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', '/__ls?p=' + encodeURIComponent(k), false);
+        try { xhr.send(); if (xhr.status === 200) res = JSON.parse(xhr.responseText); } catch { /* offline */ }
+    }
     res = withAdded(res, k);
     lsCache.set(k, res);
     return res;
@@ -89,7 +93,9 @@ export async function prefetch(keys: string[]): Promise<void> {
     }));
 }
 export async function listAsync(dir: string): Promise<string[]> {
-    try { const r = await fetch('/__ls?p=' + encodeURIComponent(dir)); return withAdded(r.ok ? await r.json() : null, keyOf(dir)) ?? []; } catch { return withAdded(null, keyOf(dir)) ?? []; }
+    const k = keyOf(dir);
+    if (bundleMode()) return withAdded(bundleDir(bundleResolve(k)), k) ?? [];
+    try { const r = await fetch('/__ls?p=' + encodeURIComponent(dir)); return withAdded(r.ok ? await r.json() : null, k) ?? []; } catch { return withAdded(null, k) ?? []; }
 }
 
 // ------------------------------------------------------------------ writable overlay (IndexedDB)

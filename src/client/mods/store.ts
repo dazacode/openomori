@@ -6,6 +6,7 @@
 // Each profile's game saves live in their own database ("omori-fs" for the original profile, so existing
 // saves are untouched), which is what makes trying a mod safe.
 import { unzipSync, zipSync } from 'fflate';
+import { bundleMods } from '../staticBundle.ts';
 
 export interface ModRecord {
     key: string;          // "browser:<id>" | "server:<label>"
@@ -110,18 +111,26 @@ export async function removeMod(key: string): Promise<void> {
 
 /** Mirror the dev ./mods folder into the library (adds new/changed, drops removed). Silent when the server has none. */
 export async function syncServerMods(): Promise<void> {
+    // A static bundle has no /__mods/* endpoints: its mods are baked as ./mods/<label>.zip next to a list in the manifest.
+    const bundled = bundleMods();
     let list: { label: string; stamp: string }[];
-    try {
-        const r = await fetch('/__mods/list', { cache: 'no-store' });
-        if (!r.ok) return;
-        list = (await r.json()).mods;
-    } catch { return; }
+    if (bundled) list = bundled;
+    else {
+        try {
+            const r = await fetch('/__mods/list', { cache: 'no-store' });
+            if (!r.ok) return;
+            list = (await r.json()).mods;
+        } catch { return; }
+    }
+    const packUrl = (label: string) => bundled
+        ? `mods/${encodeURIComponent(label)}.zip`
+        : '/__mods/pack?name=' + encodeURIComponent(label);
     const have = new Map((await listMods()).filter(r => r.origin === 'server').map(r => [r.label, r]));
     for (const m of list) {
         const old = have.get(m.label);
         have.delete(m.label);
         if (old?.stamp === m.stamp) continue;
-        const r = await fetch('/__mods/pack?name=' + encodeURIComponent(m.label), { cache: 'no-store' });
+        const r = await fetch(packUrl(m.label), { cache: 'no-store' });
         if (!r.ok) continue;
         await putMod({ key: 'server:' + m.label, label: m.label, origin: 'server', zip: new Uint8Array(await r.arrayBuffer()), stamp: m.stamp });
     }

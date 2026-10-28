@@ -32,6 +32,7 @@
   "type": "module",
   "scripts": {
     "build": "bun run build.ts",
+    "bundle": "bun run scripts/make-bundle.ts",
     "start": "bun run build.ts && bun run src/server.ts",
     "dev": "bun run build.ts --dev && bun --watch run src/server.ts",
     "typecheck": "tsc --noEmit",
