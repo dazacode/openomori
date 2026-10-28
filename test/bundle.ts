@@ -120,6 +120,34 @@ try {
     const st2 = await page.evaluate(() => ({ maps: (globalThis as any).$dataMapInfos?.length, mods: ((globalThis as any).OmoriMod ? 1 : 0) }));
     check((st2.maps ?? 0) > 400 && !!st2.mods, `the game still runs with mods applied (${st2.maps} maps, API ${st2.mods ? 'up' : 'missing'})`);
 
+    // starting a new game must work: the game builds its own asset URLs ("img/pictures/Leaf.rpgmvp") and a static host
+    // is case-sensitive (the install has `leaf.rpgmvp`), so those have to be resolved like the dev server did.
+    const missingAssets: string[] = [];
+    const onResponse = (r: any) => { const u = r.url(); if (r.status() === 404 && /\/(img|audio|movies)\//.test(u)) missingAssets.push(u.slice(u.indexOf('/', 8))); };
+    page.on('response', onResponse);
+    page.on('dialog', d => { void d.accept(); });
+    await page.mouse.click(400, 300);
+    const sceneOf = () => page.evaluate(() => (globalThis as any).SceneManager?._scene?.constructor?.name as string);
+    const tState = () => page.evaluate(() => ({ cmd: (globalThis as any).SceneManager?._scene?._commandActive, moving: (globalThis as any).SceneManager?._scene?.move?.isMoving?.(), started: (globalThis as any).SceneManager?._scene?._started, sceneStarted: (globalThis as any).SceneManager?._sceneStarted, ready: (globalThis as any).SceneManager?._scene?.isReady?.(), ok: (globalThis as any).Input?._currentState?.ok, latest: (globalThis as any).Input?._latestButton }));
+    console.log('title state before:', JSON.stringify(await tState()));
+    for (let i = 0; i < 30; i++) {
+        // hold the key: press+release in one task can happen between two frames, and then the game never sees it
+        const k = i % 2 ? 'Enter' : 'z';
+        await page.keyboard.down(k);
+        await new Promise(r => setTimeout(r, 150));
+        await page.keyboard.up(k);
+        await new Promise(r => setTimeout(r, 450));
+        if ((await sceneOf()) !== 'Scene_OmoriTitleScreen') break;
+    }
+    console.log('title state after:', JSON.stringify(await tState()));
+    const scene = await sceneOf();
+    check(scene !== 'Scene_OmoriTitleScreen', `a new game gets past the title screen (scene ${scene})`);
+    await new Promise(r => setTimeout(r, 6000));
+    const map = await page.evaluate(() => ({ scene: (globalThis as any).SceneManager?._scene?.constructor?.name, mapId: (globalThis as any).$gameMap?.mapId?.(), ready: (globalThis as any).SceneManager?._scene?.isReady?.() }));
+    check(!/Title/.test(map.scene ?? ''), `the new game progressed (scene ${map.scene}, map ${map.mapId}, ready ${map.ready})`);
+    check(missingAssets.length === 0, `no missing game assets${missingAssets.length ? `: ${missingAssets.slice(0, 5).join(' | ')}` : ''}`);
+    await page.screenshot({ path: join(import.meta.dir, 'out', 'bundle-newgame.png') });
+
     const st = await page.evaluate(() => ({ lang: (globalThis as any).$dataSystem?.locale, title: (globalThis as any).$dataSystem?.gameTitle, items: (globalThis as any).$dataItems?.length, maps: (globalThis as any).$dataMapInfos?.length }));
     check(!!st.lang, `game data loaded from the bundle (locale ${String(st.lang)})`);
     check(st.title === 'OMORI' && (st.items ?? 0) > 900 && (st.maps ?? 0) > 400, `the game's databases parsed (${st.title}, ${st.items} items, ${st.maps} maps)`);
