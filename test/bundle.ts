@@ -106,6 +106,20 @@ try {
     check(!/SUNBURN|Sunburn/.test(modsText), 'the SUNBURN mod is not in the bundle');
     await page.screenshot({ path: join(import.meta.dir, 'out', 'bundle-mods.png') });
 
+    // enabling them must work too: skill-demo patches the game's data, which exercises the plain-on-disk path
+    page.on('dialog', d => { void d.accept(); });
+    await page.evaluate(() => [...document.querySelectorAll('#omm-body button')].find(b => b.textContent === 'Enable all')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await new Promise(r => setTimeout(r, 1200));
+    const reload = await page.evaluate(() => { const b = document.getElementById('omm-reload') as HTMLElement | null; const shown = !!b && b.style.display !== 'none'; b?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return shown; });
+    check(reload, 'the mod manager offers "Apply & reload" once mods are enabled');
+    const boot2 = Date.now();
+    await page.waitForFunction(() => (globalThis as any).SceneManager?._scene?.constructor?.name === 'Scene_OmoriTitleScreen', { timeout: 180000 });
+    console.log(`title reached again with mods enabled in ${Date.now() - boot2} ms`);
+    const tab2 = await page.evaluate(() => document.getElementById('omm-tab')?.textContent ?? '(none)');
+    check(tab2 === 'Mods', `no mod errors with the mods enabled (got "${tab2}")`);
+    const st2 = await page.evaluate(() => ({ maps: (globalThis as any).$dataMapInfos?.length, mods: ((globalThis as any).OmoriMod ? 1 : 0) }));
+    check((st2.maps ?? 0) > 400 && !!st2.mods, `the game still runs with mods applied (${st2.maps} maps, API ${st2.mods ? 'up' : 'missing'})`);
+
     const st = await page.evaluate(() => ({ lang: (globalThis as any).$dataSystem?.locale, title: (globalThis as any).$dataSystem?.gameTitle, items: (globalThis as any).$dataItems?.length, maps: (globalThis as any).$dataMapInfos?.length }));
     check(!!st.lang, `game data loaded from the bundle (locale ${String(st.lang)})`);
     check(st.title === 'OMORI' && (st.items ?? 0) > 900 && (st.maps ?? 0) > 400, `the game's databases parsed (${st.title}, ${st.items} items, ${st.maps} maps)`);
